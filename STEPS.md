@@ -1,0 +1,159 @@
+# 🚀 Plan de Implementación - Smart Expense Bot v0
+
+Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
+
+---
+
+## Paso 1: Setup del Proyecto ⚙️
+**Objetivo:** Tener la estructura base lista para desarrollar.
+
+- [ ] Crear estructura de carpetas (`app/`, `tests/`)
+- [ ] Inicializar proyecto con Poetry (`pyproject.toml`)
+- [ ] Crear `.gitignore` (Python + env)
+- [ ] Crear `.env.example` con las variables necesarias
+- [ ] Crear `app/config.py` para cargar configuración
+
+**Prueba:** `poetry install` funciona sin errores.
+
+---
+
+## Paso 2: FastAPI + Webhook Básico 🌐
+**Objetivo:** Bot que responde "pong" a cualquier mensaje.
+
+- [ ] Crear `app/main.py` con FastAPI
+- [ ] Endpoint `/health` para verificar que está vivo
+- [ ] Endpoint `/webhook` que recibe updates de Telegram
+- [ ] Responder con un mensaje simple de confirmación
+
+**Prueba:** Enviar mensaje al bot → Recibe "Mensaje recibido ✓"
+
+---
+
+## Paso 3: Conexión a Supabase 🗄️
+**Objetivo:** Poder guardar y leer gastos de la base de datos.
+
+- [ ] Crear `app/database.py` con cliente Supabase
+- [ ] Función `insertar_gasto(data)`
+- [ ] Función `obtener_gastos(user, periodo?)`
+- [ ] Función `actualizar_gasto(id, data)`
+- [ ] Función `eliminar_gasto(id)`
+- [ ] Tests unitarios para database
+
+**Prueba:** Test pasa → Puedo insertar y leer un gasto desde código.
+
+---
+
+## Paso 4: Conexión a Google Sheets 📊
+**Objetivo:** Leer presupuestos desde la hoja de cálculo.
+
+- [ ] Crear `app/sheets.py` con cliente gspread
+- [ ] Función `obtener_presupuesto(categoria)`
+- [ ] Función `obtener_categorias()` (lista todas)
+- [ ] Tests unitarios para sheets
+
+**Prueba:** Test pasa → Puedo leer el límite de "Comida" desde Sheets.
+
+---
+
+## Paso 5: Agente LLM con Tools 🧠
+**Objetivo:** El cerebro que entiende mensajes y ejecuta acciones.
+
+- [ ] Crear `app/agent.py`
+- [ ] Definir tools con OpenAI Function Calling:
+  - `registrar_gasto`
+  - `editar_gasto`
+  - `eliminar_gasto`
+  - `listar_gastos`
+  - `verificar_presupuesto`
+  - `generar_reporte`
+- [ ] System prompt con personalidad del bot
+- [ ] Función principal `procesar_mensaje(texto, user)`
+- [ ] Tests para el agente (con mocks de OpenAI)
+
+**Prueba:** "Gasté 20 mil en almuerzo" → Llama a `registrar_gasto` correctamente.
+
+---
+
+## Paso 6: Procesamiento de Audio 🎤
+**Objetivo:** Convertir notas de voz a texto.
+
+- [ ] Crear `app/media.py`
+- [ ] Función `transcribir_audio(file_path)` con Whisper
+- [ ] Integrar en el webhook (detectar tipo de mensaje)
+- [ ] Tests para media
+
+**Prueba:** Enviar audio "gasté cincuenta mil en taxi" → Se registra el gasto.
+
+---
+
+## Paso 7: Procesamiento de Imágenes 📸
+**Objetivo:** Extraer datos de fotos de recibos.
+
+- [ ] Función `extraer_recibo(image_url)` en `media.py`
+- [ ] Usar GPT-4o-mini con visión
+- [ ] Validar JSON de respuesta
+- [ ] Integrar en el webhook
+
+**Prueba:** Enviar foto de recibo → Extrae monto y establece categoría.
+
+---
+
+## Paso 8: Integración Completa 🔗
+**Objetivo:** Todo conectado y funcionando end-to-end.
+
+- [ ] Webhook procesa texto, audio e imágenes
+- [ ] Agente ejecuta tools reales (no mocks)
+- [ ] Respuestas con personalidad de "Miss Toña"
+- [ ] Manejo de errores amigable
+
+**Prueba:** Flujo completo texto → DB → Sheets → Respuesta bonita.
+
+---
+
+## Paso 9: CI/CD con GitHub Actions 🔄
+**Objetivo:** Tests automáticos en cada push.
+
+- [ ] Crear `.github/workflows/ci.yml`
+- [ ] Ejecutar pytest en cada PR
+- [ ] Linting con ruff o flake8
+- [ ] Badge de status en README
+
+**Prueba:** Hacer push → GitHub Actions corre tests → ✅ Verde.
+
+---
+
+## Paso 10: Deploy 🚀
+**Objetivo:** Bot en producción accesible 24/7.
+
+- [ ] Configurar Railway/Render
+- [ ] Variables de entorno en producción
+- [ ] Configurar webhook de Telegram apuntando al servidor
+- [ ] Probar con usuarios reales
+
+**Prueba:** Bot responde desde el servidor en la nube.
+
+---
+
+## Notas
+
+- **Después de cada paso:** Probamos juntos antes de continuar.
+- **Si algo falla:** Lo arreglamos antes de seguir.
+- **Commits frecuentes:** Un commit por paso completado.
+
+---
+
+## Progreso
+
+| Paso | Estado | Fecha |
+|------|--------|-------|
+| 1. Setup | ⏳ Pendiente | - |
+| 2. Webhook | ⏳ Pendiente | - |
+| 3. Supabase | ⏳ Pendiente | - |
+| 4. Sheets | ⏳ Pendiente | - |
+| 5. Agente | ⏳ Pendiente | - |
+| 6. Audio | ⏳ Pendiente | - |
+| 7. Imágenes | ⏳ Pendiente | - |
+| 8. Integración | ⏳ Pendiente | - |
+| 9. CI/CD | ⏳ Pendiente | - |
+| 10. Deploy | ⏳ Pendiente | - |
+
