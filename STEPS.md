@@ -32,14 +32,17 @@ Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
 ## Paso 3: Conexión a Supabase 🗄️
 **Objetivo:** Poder guardar y leer gastos de la base de datos.
 
-- [ ] Crear `app/database.py` con cliente Supabase
-- [ ] Función `insertar_gasto(data)`
-- [ ] Función `obtener_gastos(user, periodo?)`
-- [ ] Función `actualizar_gasto(id, data)`
-- [ ] Función `eliminar_gasto(id)`
-- [ ] Tests unitarios para database
+- [X] Crear `app/database.py` con cliente Supabase
+- [X] Función `insertar_gasto(data)`
+- [X] Función `obtener_gastos(user, periodo?)`
+- [X] Función `actualizar_gasto(id, data)`
+- [X] Función `eliminar_gasto(id)`
+- [X] Tests unitarios para database
+- [X] Crear `supabase_schema.sql` con el schema de la tabla
 
 **Prueba:** Test pasa → Puedo insertar y leer un gasto desde código.
+
+**Nota:** Ejecuta el SQL en `supabase_schema.sql` en el SQL Editor de Supabase para crear la tabla antes de usar las funciones.
 
 ---
 
@@ -148,7 +151,7 @@ Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
 |------|--------|-------|
 | 1. Setup | ✅ Completado | - |
 | 2. Webhook | ✅ Completado | - |
-| 3. Supabase | ⏳ Pendiente | - |
+| 3. Supabase | ✅ Completado | - |
 | 4. Sheets | ⏳ Pendiente | - |
 | 5. Agente | ⏳ Pendiente | - |
 | 6. Audio | ⏳ Pendiente | - |
