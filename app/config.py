@@ -73,6 +73,16 @@ class Settings(BaseSettings):
     # Server
     host: str = Field(default="0.0.0.0", description="Host del servidor")
     port: int = Field(default=8000, description="Puerto del servidor")
+    
+    # Telegram Polling (para desarrollo local)
+    use_polling: bool = Field(
+        default=False,
+        description="Usar polling en lugar de webhooks (útil para desarrollo local)"
+    )
+    polling_interval: float = Field(
+        default=1.0,
+        description="Intervalo en segundos entre consultas de polling"
+    )
 
     @property
     def allowed_user_ids_list(self) -> List[int]:
