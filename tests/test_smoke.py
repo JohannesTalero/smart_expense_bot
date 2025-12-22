@@ -120,7 +120,10 @@ class TestGoogleSheetsSmoke:
         settings = get_settings()
 
         # Si hay credenciales JSON en variable de entorno, no necesitamos archivo
-        if settings.google_sheets_credentials_json and settings.google_sheets_credentials_json != "{}":
+        if (
+            settings.google_sheets_credentials_json
+            and settings.google_sheets_credentials_json != "{}"
+        ):
             pytest.skip("Usando credenciales desde variable de entorno, no se requiere archivo")
 
         path = settings.google_sheets_credentials_path
