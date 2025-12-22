@@ -1,7 +1,7 @@
 """Configuración de la aplicación usando Pydantic Settings."""
 
 from functools import lru_cache
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,9 +28,7 @@ class Settings(BaseSettings):
 
     # OpenAI
     openai_api_key: str = Field(..., description="API Key de OpenAI")
-    openai_model: str = Field(
-        default="gpt-4o-mini", description="Modelo de OpenAI a usar"
-    )
+    openai_model: str = Field(default="gpt-4o-mini", description="Modelo de OpenAI a usar")
 
     # Supabase
     supabase_url: str = Field(..., description="URL del proyecto Supabase")
@@ -73,19 +71,17 @@ class Settings(BaseSettings):
     # Server
     host: str = Field(default="0.0.0.0", description="Host del servidor")
     port: int = Field(default=8000, description="Puerto del servidor")
-    
+
     # Telegram Polling (para desarrollo local)
     use_polling: bool = Field(
-        default=False,
-        description="Usar polling en lugar de webhooks (útil para desarrollo local)"
+        default=False, description="Usar polling en lugar de webhooks (útil para desarrollo local)"
     )
     polling_interval: float = Field(
-        default=1.0,
-        description="Intervalo en segundos entre consultas de polling"
+        default=1.0, description="Intervalo en segundos entre consultas de polling"
     )
 
     @property
-    def allowed_user_ids_list(self) -> List[int]:
+    def allowed_user_ids_list(self) -> list[int]:
         """Convierte la cadena de IDs permitidos en una lista de enteros."""
         return [
             int(user_id.strip())
@@ -98,8 +94,7 @@ class Settings(BaseSettings):
         return user_id in self.allowed_user_ids_list
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """Obtiene la configuración de la aplicación (cached)."""
     return Settings()
-

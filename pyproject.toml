@@ -29,6 +29,7 @@ pytest = "^7.4.3"
 pytest-asyncio = "^0.21.1"
 pytest-cov = "^4.1.0"
 ruff = "^0.1.6"
+bandit = "^1.7.6"
 
 [tool.poetry.extras]
 redis = ["redis"]
@@ -40,6 +41,16 @@ build-backend = "poetry.core.masonry.api"
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+select = ["E", "F", "W", "I", "N", "B", "C4"]
+ignore = [
+    "E501",   # Line too long - handled by formatter
+    "E402",   # Module level import not at top of file (needed for some patterns)
+    "E722",   # Do not use bare except (sometimes useful in tests)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

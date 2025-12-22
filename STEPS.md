@@ -93,10 +93,11 @@ Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
 ## Paso 7: Procesamiento de Imágenes 📸
 **Objetivo:** Extraer datos de fotos de recibos.
 
-- [ ] Función `extraer_recibo(image_url)` en `media.py`
-- [ ] Usar GPT-4o-mini con visión
-- [ ] Validar JSON de respuesta
-- [ ] Integrar en el webhook
+- [X] Función `extraer_recibo(image_bytes)` en `media.py`
+- [X] Usar GPT-4o-mini con visión
+- [X] Validar JSON de respuesta
+- [X] Integrar en el webhook
+- [X] Tests para funciones de imagen
 
 **Prueba:** Enviar foto de recibo → Extrae monto y establece categoría.
 
@@ -105,10 +106,12 @@ Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
 ## Paso 8: Integración Completa 🔗
 **Objetivo:** Todo conectado y funcionando end-to-end.
 
-- [ ] Webhook procesa texto, audio e imágenes
-- [ ] Agente ejecuta tools reales (no mocks)
-- [ ] Respuestas con personalidad de "Miss Toña"
-- [ ] Manejo de errores amigable
+- [X] Webhook procesa texto, audio e imágenes
+- [X] Agente ejecuta tools reales (no mocks)
+- [X] Respuestas con personalidad de "Miss Toña"
+- [X] Manejo de errores amigable
+- [X] Siempre preguntar por método de pago
+- [X] Usar nombre de Telegram en lugar de user_id
 
 **Prueba:** Flujo completo texto → DB → Sheets → Respuesta bonita.
 
@@ -117,10 +120,11 @@ Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
 ## Paso 9: CI/CD con GitHub Actions 🔄
 **Objetivo:** Tests automáticos en cada push.
 
-- [ ] Crear `.github/workflows/ci.yml`
-- [ ] Ejecutar pytest en cada PR
-- [ ] Linting con ruff o flake8
-- [ ] Badge de status en README
+- [X] Crear `.github/workflows/ci.yml`
+- [X] Ejecutar pytest en cada PR con cobertura
+- [X] Linting con ruff
+- [X] Security check con bandit
+- [X] Badge de status en README
 
 **Prueba:** Hacer push → GitHub Actions corre tests → ✅ Verde.
 
@@ -156,8 +160,8 @@ Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
 | 4. Sheets | ✅ Completado | - |
 | 5. Agente | ✅ Completado | - |
 | 6. Audio | ✅ Completado | - |
-| 7. Imágenes | ⏳ Pendiente | - |
-| 8. Integración | ⏳ Pendiente | - |
-| 9. CI/CD | ⏳ Pendiente | - |
+| 7. Imágenes | ✅ Completado | - |
+| 8. Integración | ✅ Completado | - |
+| 9. CI/CD | ✅ Completado | - |
 | 10. Deploy | ⏳ Pendiente | - |
 

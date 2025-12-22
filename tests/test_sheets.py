@@ -100,5 +100,3 @@ class TestObtenerPresupuesto:
         """Si la categoría es vacía, debe lanzar ValueError."""
         with pytest.raises(ValueError, match="La categoría no puede estar vacía"):
             sheets.obtener_presupuesto("")
-
-

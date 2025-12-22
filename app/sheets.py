@@ -9,20 +9,19 @@ Este módulo se encarga de:
 """
 
 from functools import lru_cache
-from typing import List, Optional
+from typing import Optional
 
 import gspread
 from google.oauth2.service_account import Credentials
 
 from app.config import get_settings
 
-
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets.readonly",
 ]
 
 
-@lru_cache()
+@lru_cache
 def get_gspread_client() -> gspread.Client:
     """Crea y devuelve un cliente de gspread autenticado.
 
@@ -37,7 +36,7 @@ def get_gspread_client() -> gspread.Client:
     return gspread.authorize(credentials)
 
 
-@lru_cache()
+@lru_cache
 def _get_worksheet():
     """Obtiene la worksheet de presupuestos configurada.
 
@@ -51,7 +50,7 @@ def _get_worksheet():
     return worksheet
 
 
-def obtener_categorias() -> List[str]:
+def obtener_categorias() -> list[str]:
     """Devuelve la lista de categorías definidas en la hoja de presupuestos.
 
     Se asume un formato simple:
@@ -68,7 +67,7 @@ def obtener_categorias() -> List[str]:
     # Ignorar la fila de encabezado (primera fila)
     data_rows = values[1:]
 
-    categorias: List[str] = []
+    categorias: list[str] = []
     for row in data_rows:
         if not row:
             continue
@@ -137,5 +136,3 @@ def obtener_presupuesto(categoria: str) -> Optional[float]:
 
     # Si no se encontró la categoría
     return None
-
-

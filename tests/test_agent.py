@@ -1,11 +1,10 @@
 """Tests unitarios para el módulo de agente LLM."""
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
-from app import agent, database, sheets
+from app import agent
 
 
 class TestTools:
@@ -29,20 +28,22 @@ class TestTools:
             "categoria": "Comida",
             "created_at": datetime.utcnow().isoformat(),
         }
-        
+
         mock_obtener_presupuesto.return_value = 200000.0
         mock_obtener_gastos.return_value = [
             {"monto": 25000.0},
         ]
         mock_save_recent.return_value = True
-        
+
         # Ejecutar tool
-        resultado = agent.registrar_gasto.invoke({
-            "monto": 25000.0,
-            "item": "Pizza",
-            "categoria": "Comida",
-        })
-        
+        resultado = agent.registrar_gasto.invoke(
+            {
+                "monto": 25000.0,
+                "item": "Pizza",
+                "categoria": "Comida",
+            }
+        )
+
         # Verificaciones
         assert "Gasto registrado exitosamente" in resultado
         assert "25,000" in resultado or "25000" in resultado  # Acepta formato con o sin comas
@@ -55,13 +56,15 @@ class TestTools:
     def test_registrar_gasto_error_validacion(self, mock_insertar_gasto):
         """Test que maneja errores de validación."""
         mock_insertar_gasto.side_effect = ValueError("El monto debe ser mayor a 0")
-        
-        resultado = agent.registrar_gasto.invoke({
-            "monto": -100,
-            "item": "Test",
-            "categoria": "Test",
-        })
-        
+
+        resultado = agent.registrar_gasto.invoke(
+            {
+                "monto": -100,
+                "item": "Test",
+                "categoria": "Test",
+            }
+        )
+
         assert "Error de validación" in resultado
 
     @patch("app.agent.database.actualizar_gasto")
@@ -73,13 +76,15 @@ class TestTools:
             "monto": 30000.0,
             "item": "Pizza Grande",
         }
-        
-        resultado = agent.editar_gasto.invoke({
-            "gasto_id": gasto_id,
-            "campo": "monto",
-            "nuevo_valor": 30000.0,
-        })
-        
+
+        resultado = agent.editar_gasto.invoke(
+            {
+                "gasto_id": gasto_id,
+                "campo": "monto",
+                "nuevo_valor": 30000.0,
+            }
+        )
+
         assert "Gasto actualizado exitosamente" in resultado
         assert gasto_id in resultado
         mock_actualizar_gasto.assert_called_once()
@@ -100,12 +105,14 @@ class TestTools:
             "monto": 30000.0,
             "item": "Pizza",
         }
-        
-        resultado = agent.editar_gasto.invoke({
-            "campo": "monto",
-            "nuevo_valor": 30000.0,
-        })
-        
+
+        resultado = agent.editar_gasto.invoke(
+            {
+                "campo": "monto",
+                "nuevo_valor": 30000.0,
+            }
+        )
+
         assert "Gasto actualizado exitosamente" in resultado
         assert "Pizza" in resultado
         mock_actualizar_gasto.assert_called_once()
@@ -126,13 +133,15 @@ class TestTools:
             "monto": 30000.0,
             "item": "Pizza",
         }
-        
-        resultado = agent.editar_gasto.invoke({
-            "descripcion": "pizza",
-            "campo": "monto",
-            "nuevo_valor": 30000.0,
-        })
-        
+
+        resultado = agent.editar_gasto.invoke(
+            {
+                "descripcion": "pizza",
+                "campo": "monto",
+                "nuevo_valor": 30000.0,
+            }
+        )
+
         assert "Gasto actualizado exitosamente" in resultado
         mock_find.assert_called_once()
         mock_actualizar_gasto.assert_called_once()
@@ -141,12 +150,14 @@ class TestTools:
     def test_editar_gasto_sin_gastos_recientes(self, mock_get_last):
         """Test que maneja cuando no hay gastos recientes para editar."""
         mock_get_last.return_value = None
-        
-        resultado = agent.editar_gasto.invoke({
-            "campo": "monto",
-            "nuevo_valor": 30000.0,
-        })
-        
+
+        resultado = agent.editar_gasto.invoke(
+            {
+                "campo": "monto",
+                "nuevo_valor": 30000.0,
+            }
+        )
+
         assert "No encontré gastos recientes" in resultado
 
     @patch("app.agent.database.eliminar_gasto")
@@ -154,9 +165,9 @@ class TestTools:
         """Test que elimina un gasto con ID específico correctamente."""
         gasto_id = str(uuid4())
         mock_eliminar_gasto.return_value = True
-        
+
         resultado = agent.eliminar_gasto.invoke({"gasto_id": gasto_id})
-        
+
         assert "Gasto eliminado exitosamente" in resultado
         assert gasto_id in resultado
         mock_eliminar_gasto.assert_called_once_with(gasto_id)
@@ -173,9 +184,9 @@ class TestTools:
             "categoria": "Comida",
         }
         mock_eliminar_gasto.return_value = True
-        
+
         resultado = agent.eliminar_gasto.invoke({})
-        
+
         assert "Gasto eliminado exitosamente" in resultado
         assert "Pizza" in resultado
         mock_eliminar_gasto.assert_called_once_with(gasto_id)
@@ -184,9 +195,9 @@ class TestTools:
     def test_eliminar_gasto_sin_gastos_recientes(self, mock_get_last):
         """Test que maneja cuando no hay gastos recientes para eliminar."""
         mock_get_last.return_value = None
-        
+
         resultado = agent.eliminar_gasto.invoke({})
-        
+
         assert "No encontré gastos recientes" in resultado
 
     @patch("app.agent.database.obtener_gastos")
@@ -208,9 +219,9 @@ class TestTools:
                 "created_at": datetime.utcnow().isoformat(),
             },
         ]
-        
+
         resultado = agent.listar_gastos.invoke({"periodo": "mes"})
-        
+
         assert "Encontré 2 gasto(s)" in resultado
         assert "75000" in resultado or "75,000" in resultado
         assert "Pizza" in resultado
@@ -221,25 +232,23 @@ class TestTools:
     def test_listar_gastos_vacio(self, mock_obtener_gastos):
         """Test que maneja cuando no hay gastos."""
         mock_obtener_gastos.return_value = []
-        
+
         resultado = agent.listar_gastos.invoke({"periodo": "mes"})
-        
+
         assert "No se encontraron gastos" in resultado
 
     @patch("app.agent.database.obtener_gastos")
     @patch("app.agent.sheets.obtener_presupuesto")
-    def test_verificar_presupuesto_exitoso(
-        self, mock_obtener_presupuesto, mock_obtener_gastos
-    ):
+    def test_verificar_presupuesto_exitoso(self, mock_obtener_presupuesto, mock_obtener_gastos):
         """Test que verifica presupuesto correctamente."""
         mock_obtener_presupuesto.return_value = 200000.0
         mock_obtener_gastos.return_value = [
             {"monto": 50000.0},
             {"monto": 30000.0},
         ]
-        
+
         resultado = agent.verificar_presupuesto.invoke({"categoria": "Comida"})
-        
+
         assert "Presupuesto de Comida" in resultado
         assert "200000" in resultado or "200,000" in resultado
         assert "80000" in resultado or "80,000" in resultado
@@ -249,16 +258,14 @@ class TestTools:
     def test_verificar_presupuesto_no_encontrado(self, mock_obtener_presupuesto):
         """Test que maneja cuando no hay presupuesto definido."""
         mock_obtener_presupuesto.return_value = None
-        
+
         resultado = agent.verificar_presupuesto.invoke({"categoria": "CategoriaInexistente"})
-        
+
         assert "No se encontró un presupuesto definido" in resultado
 
     @patch("app.agent.database.obtener_gastos")
     @patch("app.agent.sheets.obtener_presupuesto")
-    def test_generar_reporte_exitoso(
-        self, mock_obtener_presupuesto, mock_obtener_gastos
-    ):
+    def test_generar_reporte_exitoso(self, mock_obtener_presupuesto, mock_obtener_gastos):
         """Test que genera un reporte correctamente."""
         mock_obtener_gastos.return_value = [
             {
@@ -270,7 +277,7 @@ class TestTools:
                 "categoria": "Transporte",
             },
         ]
-        
+
         # Mock para obtener presupuestos
         def mock_presupuesto(categoria):
             if categoria == "Comida":
@@ -278,11 +285,11 @@ class TestTools:
             elif categoria == "Transporte":
                 return 100000.0
             return None
-        
+
         mock_obtener_presupuesto.side_effect = mock_presupuesto
-        
+
         resultado = agent.generar_reporte.invoke({"periodo": "mes"})
-        
+
         assert "Reporte de gastos" in resultado
         assert "75000" in resultado or "75,000" in resultado
         assert "Comida" in resultado
@@ -301,9 +308,9 @@ class TestProcesarMensaje:
             "output": "¡Anotado, miau! 🐱 $25.000 en Pizza 🍕 (Comida)."
         }
         mock_obtener_agente.return_value = mock_agente
-        
+
         resultado = agent.procesar_mensaje("Gasté 25 mil en pizza", user="test_user")
-        
+
         assert "Anotado" in resultado or "miau" in resultado.lower()
         mock_agente.invoke.assert_called_once()
 
@@ -313,9 +320,9 @@ class TestProcesarMensaje:
         mock_agente = Mock()
         mock_agente.invoke.side_effect = Exception("Error de conexión")
         mock_obtener_agente.return_value = mock_agente
-        
+
         resultado = agent.procesar_mensaje("Test", user="test_user")
-        
+
         assert "Miau" in resultado or "error" in resultado.lower()
         assert "intentar de nuevo" in resultado.lower() or "intenta" in resultado.lower()
 
@@ -324,14 +331,14 @@ class TestProcesarMensaje:
         """Test que el agente se crea solo una vez (singleton)."""
         mock_agente = Mock()
         mock_crear_agente.return_value = mock_agente
-        
+
         # Resetear el singleton
         agent._agente = None
-        
+
         # Llamar múltiples veces
         agente1 = agent.obtener_agente()
         agente2 = agent.obtener_agente()
-        
+
         # Debe ser la misma instancia
         assert agente1 is agente2
         # Debe haberse creado solo una vez
@@ -354,23 +361,23 @@ class TestCrearAgente:
         mock_settings.openai_model = "gpt-4o-mini"
         mock_settings.openai_api_key = "test-key"
         mock_get_settings.return_value = mock_settings
-        
+
         # Mock de componentes
         mock_llm = Mock()
         mock_chat_openai.return_value = mock_llm
-        
+
         mock_agent = Mock()
         mock_create_agent.return_value = mock_agent
-        
+
         mock_executor = Mock()
         mock_agent_executor.return_value = mock_executor
-        
+
         # Resetear singleton
         agent._agente = None
-        
+
         # Crear agente
         resultado = agent.crear_agente()
-        
+
         # Verificaciones
         assert resultado == mock_executor
         mock_chat_openai.assert_called_once_with(
@@ -380,4 +387,3 @@ class TestCrearAgente:
         )
         mock_create_agent.assert_called_once()
         mock_agent_executor.assert_called_once()
-
