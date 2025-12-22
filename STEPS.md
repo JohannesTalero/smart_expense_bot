@@ -7,11 +7,11 @@ Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
 ## Paso 1: Setup del Proyecto ⚙️
 **Objetivo:** Tener la estructura base lista para desarrollar.
 
-- [ ] Crear estructura de carpetas (`app/`, `tests/`)
-- [ ] Inicializar proyecto con Poetry (`pyproject.toml`)
-- [ ] Crear `.gitignore` (Python + env)
-- [ ] Crear `.env.example` con las variables necesarias
-- [ ] Crear `app/config.py` para cargar configuración
+- [X] Crear estructura de carpetas (`app/`, `tests/`)
+- [X] Inicializar proyecto con Poetry (`pyproject.toml`)
+- [X] Crear `.gitignore` (Python + env)
+- [X] Crear `.env.example` con las variables necesarias
+- [X] Crear `app/config.py` para cargar configuración
 
 **Prueba:** `poetry install` funciona sin errores.
 
@@ -20,10 +20,10 @@ Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
 ## Paso 2: FastAPI + Webhook Básico 🌐
 **Objetivo:** Bot que responde "pong" a cualquier mensaje.
 
-- [ ] Crear `app/main.py` con FastAPI
-- [ ] Endpoint `/health` para verificar que está vivo
-- [ ] Endpoint `/webhook` que recibe updates de Telegram
-- [ ] Responder con un mensaje simple de confirmación
+- [X] Crear `app/main.py` con FastAPI
+- [X] Endpoint `/health` para verificar que está vivo
+- [X] Endpoint `/webhook` que recibe updates de Telegram
+- [X] Responder con un mensaje simple de confirmación
 
 **Prueba:** Enviar mensaje al bot → Recibe "Mensaje recibido ✓"
 
@@ -146,8 +146,8 @@ Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
 
 | Paso | Estado | Fecha |
 |------|--------|-------|
-| 1. Setup | ⏳ Pendiente | - |
-| 2. Webhook | ⏳ Pendiente | - |
+| 1. Setup | ✅ Completado | - |
+| 2. Webhook | ✅ Completado | - |
 | 3. Supabase | ⏳ Pendiente | - |
 | 4. Sheets | ⏳ Pendiente | - |
 | 5. Agente | ⏳ Pendiente | - |
