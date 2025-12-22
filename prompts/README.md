@@ -36,3 +36,5 @@ El contenido se carga tal cual, removiendo solo el primer encabezado si existe (
 - Los archivos se leen con encoding UTF-8
 - Si un archivo no existe, se lanzará un `FileNotFoundError` al intentar cargarlo
 
+
+

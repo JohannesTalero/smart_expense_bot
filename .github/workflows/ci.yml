@@ -85,11 +85,12 @@ jobs:
         env:
           # Variables de entorno mínimas para los tests
           TELEGRAM_BOT_TOKEN: "test_token"
+          TELEGRAM_ALLOWED_USER_IDS: "123456789"
           OPENAI_API_KEY: "test_key"
           SUPABASE_URL: "https://test.supabase.co"
           SUPABASE_KEY: "test_key"
           GOOGLE_SHEETS_CREDENTIALS_JSON: "{}"
-          GOOGLE_SHEETS_ID: "test_sheet_id"
+          GOOGLE_SHEETS_SPREADSHEET_ID: "test_sheet_id"
           REDIS_ENABLED: "false"
         run: |
           poetry run pytest tests/ \
