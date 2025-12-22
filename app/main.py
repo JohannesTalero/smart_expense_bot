@@ -32,15 +32,114 @@ settings = get_settings()
 # Variable global para la tarea de polling
 polling_task: Optional[asyncio.Task] = None
 
+# ============ Buffer de mensajes (debounce) ============
+# Tiempo de espera antes de procesar mensajes acumulados (segundos)
+MESSAGE_BUFFER_DELAY = 3.0
+
+# Almacena mensajes pendientes por chat_id: {chat_id: [{"text": ..., "user_name": ..., ...}, ...]}
+pending_messages: dict[int, list[dict[str, Any]]] = {}
+
+# Almacena los timers activos por chat_id: {chat_id: asyncio.Task}
+pending_timers: dict[int, asyncio.Task] = {}
+
+# Lock para evitar race conditions
+buffer_lock = asyncio.Lock()
+
+
+async def process_buffered_messages(chat_id: int) -> None:
+    """
+    Procesa los mensajes acumulados de un chat después del delay.
+    Concatena todos los mensajes de texto y los envía al agente.
+    """
+    async with buffer_lock:
+        messages = pending_messages.pop(chat_id, [])
+        pending_timers.pop(chat_id, None)
+
+    if not messages:
+        return
+
+    # Usar datos del primer mensaje para user_name, user_id, etc.
+    first_msg = messages[0]
+    user_name = first_msg["user_name"]
+    user_id = first_msg["user_id"]
+
+    # Concatenar todos los textos
+    combined_text = " ".join(msg["text"] for msg in messages if msg.get("text"))
+
+    logger.info(
+        f"Procesando {len(messages)} mensaje(s) acumulados de {user_name}: '{combined_text[:80]}...'"
+    )
+
+    try:
+        # Procesar el mensaje combinado con el agente LLM
+        response_text = await asyncio.to_thread(
+            procesar_mensaje,
+            texto=combined_text,
+            user=user_name,
+        )
+
+        # Enviar respuesta a Telegram
+        telegram_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                telegram_url,
+                json={
+                    "chat_id": chat_id,
+                    "text": response_text,
+                },
+            )
+
+        logger.info(f"Respuesta enviada a chat {chat_id}")
+
+    except Exception as e:
+        logger.error(f"Error procesando mensajes acumulados: {e}", exc_info=True)
+        try:
+            telegram_url = (
+                f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+            )
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    telegram_url,
+                    json={
+                        "chat_id": chat_id,
+                        "text": "Miau... 😿 Algo salió mal. Por favor intenta de nuevo.",
+                    },
+                )
+        except Exception as send_error:
+            logger.error(f"Error enviando mensaje de error: {send_error}", exc_info=True)
+
+
+async def schedule_buffer_processing(chat_id: int) -> None:
+    """
+    Programa el procesamiento de mensajes después del delay.
+    Si ya hay un timer, lo cancela y crea uno nuevo (debounce).
+    """
+    async with buffer_lock:
+        # Cancelar timer existente si hay uno
+        if chat_id in pending_timers:
+            pending_timers[chat_id].cancel()
+            try:
+                await pending_timers[chat_id]
+            except asyncio.CancelledError:
+                pass
+
+        # Crear nuevo timer
+        async def delayed_process():
+            await asyncio.sleep(MESSAGE_BUFFER_DELAY)
+            await process_buffered_messages(chat_id)
+
+        pending_timers[chat_id] = asyncio.create_task(delayed_process())
+
 
 async def process_update(update_data: dict[str, Any]) -> None:
     """
     Procesa un update de Telegram (compartido entre webhook y polling).
 
     Soporta:
-    - Mensajes de texto
-    - Notas de voz (audio)
-    - Fotos/imágenes (recibos)
+    - Mensajes de texto (con buffer/debounce para mensajes fragmentados)
+    - Notas de voz (audio) - procesamiento inmediato
+    - Fotos/imágenes (recibos) - procesamiento inmediato
     """
     chat_id = None
     try:
@@ -213,30 +312,49 @@ async def process_update(update_data: dict[str, Any]) -> None:
                 "• 🎤 Envíame una nota de voz\n"
                 "• 📸 Envíame una foto del recibo"
             )
-        else:
-            # Procesar el mensaje con el agente LLM
-            # Ejecutar en thread pool para no bloquear el event loop
-            # Usamos el nombre de Telegram para identificar al usuario
-            # No pasar chat_history - el agente lo obtiene de Redis si está habilitado
+            # Mensaje de ayuda se envía inmediatamente
+            telegram_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    telegram_url,
+                    json={"chat_id": chat_id, "text": response_text},
+                )
+            return
+
+        # Determinar si el mensaje requiere procesamiento inmediato o puede ir al buffer
+        # Audio y fotos ya fueron procesados arriba y tienen texto construido
+        is_media_message = bool(voice or audio or photo or (document and document.get("mime_type", "").startswith("image/")))
+
+        if is_media_message:
+            # Mensajes con media: procesar inmediatamente
             response_text = await asyncio.to_thread(
                 procesar_mensaje,
                 texto=text,
                 user=user_name,
             )
 
-        # Enviar respuesta a Telegram
-        telegram_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+            telegram_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    telegram_url,
+                    json={"chat_id": chat_id, "text": response_text},
+                )
+            logger.info(f"Respuesta enviada a chat {chat_id}")
+        else:
+            # Mensajes de texto puro: agregar al buffer (debounce)
+            async with buffer_lock:
+                if chat_id not in pending_messages:
+                    pending_messages[chat_id] = []
 
-        async with httpx.AsyncClient() as client:
-            await client.post(
-                telegram_url,
-                json={
-                    "chat_id": chat_id,
-                    "text": response_text,
-                },
-            )
+                pending_messages[chat_id].append({
+                    "text": text,
+                    "user_name": user_name,
+                    "user_id": user_id,
+                })
 
-        logger.info(f"Respuesta enviada a chat {chat_id}")
+            # Programar procesamiento (reinicia el timer si ya existe)
+            await schedule_buffer_processing(chat_id)
+            logger.debug(f"Mensaje agregado al buffer para chat {chat_id}")
 
     except Exception as e:
         logger.error(f"Error procesando update: {e}", exc_info=True)
