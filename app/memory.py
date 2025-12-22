@@ -247,3 +247,173 @@ def cleanup_old_conversations(days_to_keep: int = 1) -> int:
         logger.error(f"Error en limpieza de conversaciones: {e}", exc_info=True)
         return 0
 
+
+# ==================== GASTOS RECIENTES ====================
+
+def _get_recent_expenses_key(user_id: str) -> str:
+    """
+    Genera la clave Redis para los gastos recientes de un usuario.
+    
+    Args:
+        user_id: ID del usuario.
+    
+    Returns:
+        Clave Redis (ej: "recent_expenses:user_123").
+    """
+    return f"recent_expenses:{user_id}"
+
+
+def save_recent_expense(user_id: str, expense_id: str, expense_data: Dict[str, Any]) -> bool:
+    """
+    Guarda un gasto en la lista de gastos recientes del usuario.
+    
+    El gasto se agrega al principio de la lista (LPUSH), manteniendo los más
+    recientes primero. Se limita a los últimos 10 gastos.
+    
+    Args:
+        user_id: ID del usuario.
+        expense_id: ID del gasto (UUID de Supabase).
+        expense_data: Diccionario con datos básicos del gasto (monto, item, categoria).
+    
+    Returns:
+        True si se guardó correctamente, False en caso contrario.
+    """
+    client = get_redis_client()
+    if client is None:
+        return False
+    
+    try:
+        key = _get_recent_expenses_key(user_id)
+        
+        # Preparar datos a guardar
+        data = {
+            "id": expense_id,
+            "monto": expense_data.get("monto"),
+            "item": expense_data.get("item"),
+            "categoria": expense_data.get("categoria"),
+            "timestamp": datetime.now().isoformat(),
+        }
+        
+        # Agregar al principio de la lista (más reciente primero)
+        client.lpush(key, json.dumps(data))
+        
+        # Mantener solo los últimos 10 gastos
+        client.ltrim(key, 0, 9)
+        
+        # TTL de 25 horas (igual que conversaciones)
+        client.expire(key, 25 * 60 * 60)
+        
+        logger.debug(f"Gasto reciente guardado: {expense_id} para usuario {user_id}")
+        return True
+    
+    except Exception as e:
+        logger.error(f"Error guardando gasto reciente en Redis: {e}", exc_info=True)
+        return False
+
+
+def get_recent_expenses(user_id: str, limit: int = 5) -> List[Dict[str, Any]]:
+    """
+    Obtiene los últimos gastos registrados por el usuario.
+    
+    Args:
+        user_id: ID del usuario.
+        limit: Número máximo de gastos a retornar (default: 5).
+    
+    Returns:
+        Lista de diccionarios con los gastos recientes (más reciente primero).
+        Cada diccionario tiene: id, monto, item, categoria, timestamp.
+    """
+    client = get_redis_client()
+    if client is None:
+        return []
+    
+    try:
+        key = _get_recent_expenses_key(user_id)
+        
+        # Obtener los primeros N gastos (ya están ordenados por más reciente)
+        expenses_json = client.lrange(key, 0, limit - 1)
+        
+        if not expenses_json:
+            return []
+        
+        expenses = []
+        for exp_json in expenses_json:
+            try:
+                expense = json.loads(exp_json)
+                expenses.append(expense)
+            except Exception as e:
+                logger.warning(f"Error parseando gasto reciente: {e}")
+                continue
+        
+        return expenses
+    
+    except Exception as e:
+        logger.error(f"Error obteniendo gastos recientes de Redis: {e}", exc_info=True)
+        return []
+
+
+def get_last_expense(user_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Obtiene el último gasto registrado por el usuario.
+    
+    Args:
+        user_id: ID del usuario.
+    
+    Returns:
+        Diccionario con los datos del último gasto o None si no hay gastos.
+    """
+    expenses = get_recent_expenses(user_id, limit=1)
+    return expenses[0] if expenses else None
+
+
+def find_recent_expense_by_description(user_id: str, search_term: str) -> Optional[Dict[str, Any]]:
+    """
+    Busca un gasto reciente por descripción (item) o categoría.
+    
+    Args:
+        user_id: ID del usuario.
+        search_term: Término de búsqueda (ej: "pizza", "comida").
+    
+    Returns:
+        Diccionario con el gasto encontrado o None si no hay coincidencias.
+    """
+    expenses = get_recent_expenses(user_id, limit=10)
+    
+    if not expenses:
+        return None
+    
+    search_lower = search_term.lower()
+    
+    for expense in expenses:
+        item = expense.get("item", "").lower()
+        categoria = expense.get("categoria", "").lower()
+        
+        if search_lower in item or search_lower in categoria:
+            return expense
+    
+    return None
+
+
+def clear_recent_expenses(user_id: str) -> bool:
+    """
+    Limpia la lista de gastos recientes del usuario.
+    
+    Args:
+        user_id: ID del usuario.
+    
+    Returns:
+        True si se limpió correctamente, False en caso contrario.
+    """
+    client = get_redis_client()
+    if client is None:
+        return False
+    
+    try:
+        key = _get_recent_expenses_key(user_id)
+        deleted = client.delete(key)
+        logger.info(f"Gastos recientes limpiados para usuario {user_id}")
+        return deleted > 0
+    
+    except Exception as e:
+        logger.error(f"Error limpiando gastos recientes de Redis: {e}", exc_info=True)
+        return False

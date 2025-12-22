@@ -80,10 +80,11 @@ Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
 ## Paso 6: Procesamiento de Audio 🎤
 **Objetivo:** Convertir notas de voz a texto.
 
-- [ ] Crear `app/media.py`
-- [ ] Función `transcribir_audio(file_path)` con Whisper
-- [ ] Integrar en el webhook (detectar tipo de mensaje)
-- [ ] Tests para media
+- [X] Crear `app/media.py`
+- [X] Función `transcribir_audio(audio_bytes)` con Whisper
+- [X] Función `transcribir_audio_telegram(file_id)` - flujo completo
+- [X] Integrar en el webhook (detectar tipo de mensaje)
+- [X] Tests para media
 
 **Prueba:** Enviar audio "gasté cincuenta mil en taxi" → Se registra el gasto.
 
@@ -154,7 +155,7 @@ Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
 | 3. Supabase | ✅ Completado | - |
 | 4. Sheets | ✅ Completado | - |
 | 5. Agente | ✅ Completado | - |
-| 6. Audio | ⏳ Pendiente | - |
+| 6. Audio | ✅ Completado | - |
 | 7. Imágenes | ⏳ Pendiente | - |
 | 8. Integración | ⏳ Pendiente | - |
 | 9. CI/CD | ⏳ Pendiente | - |

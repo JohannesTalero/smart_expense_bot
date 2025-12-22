@@ -10,6 +10,7 @@ import httpx
 
 from app.config import get_settings
 from app.agent import procesar_mensaje
+from app.media import transcribir_audio_telegram
 
 # Configurar logging
 logging.basicConfig(
@@ -35,6 +36,10 @@ polling_task: Optional[asyncio.Task] = None
 async def process_update(update_data: Dict[str, Any]) -> None:
     """
     Procesa un update de Telegram (compartido entre webhook y polling).
+    
+    Soporta:
+    - Mensajes de texto
+    - Notas de voz (audio)
     """
     chat_id = None
     try:
@@ -48,7 +53,11 @@ async def process_update(update_data: Dict[str, Any]) -> None:
         user_id = message.get("from", {}).get("id")
         text = message.get("text", "")
 
-        logger.info(f"Mensaje recibido de usuario {user_id}: {text}")
+        # Detectar tipo de mensaje
+        voice = message.get("voice")  # Nota de voz
+        audio = message.get("audio")  # Archivo de audio
+
+        logger.info(f"Mensaje recibido de usuario {user_id}: texto='{text[:50] if text else '(vacío)'}', voice={bool(voice)}")
 
         # Validar usuario autorizado
         if user_id and not settings.is_user_allowed(user_id):
@@ -66,15 +75,51 @@ async def process_update(update_data: Dict[str, Any]) -> None:
                     )
             return
 
-        # Si no hay texto, responder con mensaje de ayuda
+        # Procesar audio (nota de voz o archivo de audio)
+        if voice or audio:
+            audio_data = voice or audio
+            file_id = audio_data.get("file_id")
+            
+            if file_id:
+                logger.info(f"Procesando audio: file_id={file_id}")
+                
+                # Notificar al usuario que estamos procesando
+                telegram_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendChatAction"
+                async with httpx.AsyncClient() as client:
+                    await client.post(
+                        telegram_url,
+                        json={"chat_id": chat_id, "action": "typing"},
+                    )
+                
+                try:
+                    # Transcribir el audio
+                    text = await transcribir_audio_telegram(file_id)
+                    logger.info(f"Audio transcrito: '{text[:50]}...'")
+                except Exception as e:
+                    logger.error(f"Error transcribiendo audio: {e}", exc_info=True)
+                    response_text = (
+                        "Mrrrow... 😿 No pude entender ese audio. "
+                        "¿Puedes intentar de nuevo o escribirme el mensaje?"
+                    )
+                    # Enviar respuesta de error y salir
+                    telegram_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+                    async with httpx.AsyncClient() as client:
+                        await client.post(
+                            telegram_url,
+                            json={"chat_id": chat_id, "text": response_text},
+                        )
+                    return
+
+        # Si no hay texto (ni transcrito), responder con mensaje de ayuda
         if not text:
             response_text = (
-                "Miau... 🐱 Envíame un mensaje de texto para registrar un gasto.\n\n"
+                "Miau... 🐱 Envíame un mensaje de texto o nota de voz para registrar un gasto.\n\n"
                 "Ejemplos:\n"
                 "• Gasté 20 mil en almuerzo\n"
                 "• 50000 en transporte\n"
                 "• ¿Cuánto gasté este mes?\n"
-                "• Ver presupuesto de comida"
+                "• Ver presupuesto de comida\n"
+                "• 🎤 O envíame una nota de voz diciendo tu gasto"
             )
         else:
             # Procesar el mensaje con el agente LLM

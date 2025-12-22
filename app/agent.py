@@ -23,6 +23,10 @@ from app.memory import (
     get_conversation_history,
     save_message,
     clear_conversation_history,
+    save_recent_expense,
+    get_last_expense,
+    get_recent_expenses,
+    find_recent_expense_by_description,
 )
 
 logger = logging.getLogger(__name__)
@@ -126,7 +130,19 @@ def registrar_gasto(
             raw_input=raw_input,
         )
         
-        # Paso 2: Intentar verificar presupuesto (operación secundaria, no crítica)
+        # Paso 2: Guardar el gasto en Redis para poder referenciarlo después
+        # (editar/eliminar "el último gasto" sin necesidad del ID)
+        save_recent_expense(
+            user_id=user,
+            expense_id=gasto['id'],
+            expense_data={
+                "monto": monto,
+                "item": item,
+                "categoria": categoria,
+            }
+        )
+        
+        # Paso 3: Intentar verificar presupuesto (operación secundaria, no crítica)
         # Si falla, el gasto ya está registrado - no perdemos la operación principal
         try:
             presupuesto = sheets.obtener_presupuesto(categoria)
@@ -162,31 +178,66 @@ def registrar_gasto(
 
 @tool
 def editar_gasto(
-    gasto_id: str,
     campo: str,
     nuevo_valor: Any,
+    gasto_id: Optional[str] = None,
+    descripcion: Optional[str] = None,
 ) -> str:
     """Edita un campo específico de un gasto existente.
     
+    Puede identificar el gasto de tres formas:
+    1. Por ID específico (gasto_id)
+    2. Por descripción/item (descripcion) - busca en gastos recientes
+    3. Automáticamente usa el último gasto registrado si no se especifica ninguno
+    
     Args:
-        gasto_id: ID del gasto a editar (UUID).
         campo: Campo a editar (monto, item, categoria, metodo, notas).
         nuevo_valor: Nuevo valor para el campo.
+        gasto_id: ID del gasto a editar (UUID). Opcional.
+        descripcion: Descripción o item del gasto para buscarlo (ej: "pizza", "taxi"). Opcional.
     
     Returns:
         Mensaje de confirmación con los detalles del gasto actualizado.
     """
     try:
+        user = _obtener_usuario_actual()
+        
+        # Determinar el ID del gasto a editar
+        if gasto_id:
+            # Usar el ID proporcionado directamente
+            id_a_editar = gasto_id
+            contexto = f"ID: {gasto_id}"
+        elif descripcion:
+            # Buscar por descripción en gastos recientes
+            gasto_encontrado = find_recent_expense_by_description(user, descripcion)
+            if not gasto_encontrado:
+                return (
+                    f"No encontré un gasto reciente que coincida con '{descripcion}'. "
+                    f"Intenta ser más específico o proporciona el ID del gasto."
+                )
+            id_a_editar = gasto_encontrado["id"]
+            contexto = f"{gasto_encontrado['item']} (${gasto_encontrado['monto']:,.0f})"
+        else:
+            # Usar el último gasto registrado
+            ultimo_gasto = get_last_expense(user)
+            if not ultimo_gasto:
+                return (
+                    "No encontré gastos recientes para editar. "
+                    "Registra un gasto primero o proporciona el ID del gasto."
+                )
+            id_a_editar = ultimo_gasto["id"]
+            contexto = f"último gasto: {ultimo_gasto['item']} (${ultimo_gasto['monto']:,.0f})"
+        
         campos = {campo: nuevo_valor}
         
         # Convertir monto a float si es necesario
         if campo == "monto":
             campos["monto"] = float(nuevo_valor)
         
-        gasto = database.actualizar_gasto(gasto_id, campos)
+        gasto = database.actualizar_gasto(id_a_editar, campos)
         
         return (
-            f"Gasto actualizado exitosamente. ID: {gasto_id}. "
+            f"Gasto actualizado exitosamente ({contexto}). "
             f"Campo '{campo}' cambiado a: {nuevo_valor}."
         )
     
@@ -198,22 +249,59 @@ def editar_gasto(
 
 
 @tool
-def eliminar_gasto(gasto_id: str) -> str:
+def eliminar_gasto(
+    gasto_id: Optional[str] = None,
+    descripcion: Optional[str] = None,
+) -> str:
     """Elimina un gasto de la base de datos.
     
+    Puede identificar el gasto de tres formas:
+    1. Por ID específico (gasto_id)
+    2. Por descripción/item (descripcion) - busca en gastos recientes
+    3. Automáticamente usa el último gasto registrado si no se especifica ninguno
+    
     Args:
-        gasto_id: ID del gasto a eliminar (UUID).
+        gasto_id: ID del gasto a eliminar (UUID). Opcional.
+        descripcion: Descripción o item del gasto para buscarlo (ej: "pizza", "taxi"). Opcional.
     
     Returns:
         Mensaje de confirmación de eliminación.
     """
     try:
-        eliminado = database.eliminar_gasto(gasto_id)
+        user = _obtener_usuario_actual()
+        
+        # Determinar el ID del gasto a eliminar
+        if gasto_id:
+            # Usar el ID proporcionado directamente
+            id_a_eliminar = gasto_id
+            contexto = f"ID: {gasto_id}"
+        elif descripcion:
+            # Buscar por descripción en gastos recientes
+            gasto_encontrado = find_recent_expense_by_description(user, descripcion)
+            if not gasto_encontrado:
+                return (
+                    f"No encontré un gasto reciente que coincida con '{descripcion}'. "
+                    f"Intenta ser más específico o proporciona el ID del gasto."
+                )
+            id_a_eliminar = gasto_encontrado["id"]
+            contexto = f"{gasto_encontrado['item']} (${gasto_encontrado['monto']:,.0f})"
+        else:
+            # Usar el último gasto registrado
+            ultimo_gasto = get_last_expense(user)
+            if not ultimo_gasto:
+                return (
+                    "No encontré gastos recientes para eliminar. "
+                    "Registra un gasto primero o proporciona el ID del gasto."
+                )
+            id_a_eliminar = ultimo_gasto["id"]
+            contexto = f"último gasto: {ultimo_gasto['item']} (${ultimo_gasto['monto']:,.0f})"
+        
+        eliminado = database.eliminar_gasto(id_a_eliminar)
         
         if eliminado:
-            return f"Gasto eliminado exitosamente. ID: {gasto_id}."
+            return f"Gasto eliminado exitosamente ({contexto})."
         else:
-            return f"No se encontró el gasto con ID: {gasto_id}."
+            return f"No se encontró el gasto ({contexto})."
     
     except ValueError as e:
         return f"Error de validación: {str(e)}"

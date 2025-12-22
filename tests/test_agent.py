@@ -11,11 +11,12 @@ from app import agent, database, sheets
 class TestTools:
     """Tests para las tools individuales del agente."""
 
+    @patch("app.agent.save_recent_expense")
     @patch("app.agent.database.insertar_gasto")
     @patch("app.agent.sheets.obtener_presupuesto")
     @patch("app.agent.database.obtener_gastos")
     def test_registrar_gasto_exitoso(
-        self, mock_obtener_gastos, mock_obtener_presupuesto, mock_insertar_gasto
+        self, mock_obtener_gastos, mock_obtener_presupuesto, mock_insertar_gasto, mock_save_recent
     ):
         """Test que registra un gasto correctamente."""
         # Mock de datos
@@ -33,6 +34,7 @@ class TestTools:
         mock_obtener_gastos.return_value = [
             {"monto": 25000.0},
         ]
+        mock_save_recent.return_value = True
         
         # Ejecutar tool
         resultado = agent.registrar_gasto.invoke({
@@ -47,6 +49,7 @@ class TestTools:
         assert "Pizza" in resultado
         assert "Comida" in resultado
         mock_insertar_gasto.assert_called_once()
+        mock_save_recent.assert_called_once()  # Verifica que se guardó en Redis
 
     @patch("app.agent.database.insertar_gasto")
     def test_registrar_gasto_error_validacion(self, mock_insertar_gasto):
@@ -62,8 +65,8 @@ class TestTools:
         assert "Error de validación" in resultado
 
     @patch("app.agent.database.actualizar_gasto")
-    def test_editar_gasto_exitoso(self, mock_actualizar_gasto):
-        """Test que edita un gasto correctamente."""
+    def test_editar_gasto_con_id_exitoso(self, mock_actualizar_gasto):
+        """Test que edita un gasto con ID específico correctamente."""
         gasto_id = str(uuid4())
         mock_actualizar_gasto.return_value = {
             "id": gasto_id,
@@ -81,9 +84,74 @@ class TestTools:
         assert gasto_id in resultado
         mock_actualizar_gasto.assert_called_once()
 
+    @patch("app.agent.get_last_expense")
+    @patch("app.agent.database.actualizar_gasto")
+    def test_editar_ultimo_gasto_exitoso(self, mock_actualizar_gasto, mock_get_last):
+        """Test que edita el último gasto cuando no se especifica ID."""
+        gasto_id = str(uuid4())
+        mock_get_last.return_value = {
+            "id": gasto_id,
+            "monto": 25000.0,
+            "item": "Pizza",
+            "categoria": "Comida",
+        }
+        mock_actualizar_gasto.return_value = {
+            "id": gasto_id,
+            "monto": 30000.0,
+            "item": "Pizza",
+        }
+        
+        resultado = agent.editar_gasto.invoke({
+            "campo": "monto",
+            "nuevo_valor": 30000.0,
+        })
+        
+        assert "Gasto actualizado exitosamente" in resultado
+        assert "Pizza" in resultado
+        mock_actualizar_gasto.assert_called_once()
+
+    @patch("app.agent.find_recent_expense_by_description")
+    @patch("app.agent.database.actualizar_gasto")
+    def test_editar_gasto_por_descripcion_exitoso(self, mock_actualizar_gasto, mock_find):
+        """Test que edita un gasto buscándolo por descripción."""
+        gasto_id = str(uuid4())
+        mock_find.return_value = {
+            "id": gasto_id,
+            "monto": 25000.0,
+            "item": "Pizza",
+            "categoria": "Comida",
+        }
+        mock_actualizar_gasto.return_value = {
+            "id": gasto_id,
+            "monto": 30000.0,
+            "item": "Pizza",
+        }
+        
+        resultado = agent.editar_gasto.invoke({
+            "descripcion": "pizza",
+            "campo": "monto",
+            "nuevo_valor": 30000.0,
+        })
+        
+        assert "Gasto actualizado exitosamente" in resultado
+        mock_find.assert_called_once()
+        mock_actualizar_gasto.assert_called_once()
+
+    @patch("app.agent.get_last_expense")
+    def test_editar_gasto_sin_gastos_recientes(self, mock_get_last):
+        """Test que maneja cuando no hay gastos recientes para editar."""
+        mock_get_last.return_value = None
+        
+        resultado = agent.editar_gasto.invoke({
+            "campo": "monto",
+            "nuevo_valor": 30000.0,
+        })
+        
+        assert "No encontré gastos recientes" in resultado
+
     @patch("app.agent.database.eliminar_gasto")
-    def test_eliminar_gasto_exitoso(self, mock_eliminar_gasto):
-        """Test que elimina un gasto correctamente."""
+    def test_eliminar_gasto_con_id_exitoso(self, mock_eliminar_gasto):
+        """Test que elimina un gasto con ID específico correctamente."""
         gasto_id = str(uuid4())
         mock_eliminar_gasto.return_value = True
         
@@ -92,6 +160,34 @@ class TestTools:
         assert "Gasto eliminado exitosamente" in resultado
         assert gasto_id in resultado
         mock_eliminar_gasto.assert_called_once_with(gasto_id)
+
+    @patch("app.agent.get_last_expense")
+    @patch("app.agent.database.eliminar_gasto")
+    def test_eliminar_ultimo_gasto_exitoso(self, mock_eliminar_gasto, mock_get_last):
+        """Test que elimina el último gasto cuando no se especifica ID."""
+        gasto_id = str(uuid4())
+        mock_get_last.return_value = {
+            "id": gasto_id,
+            "monto": 25000.0,
+            "item": "Pizza",
+            "categoria": "Comida",
+        }
+        mock_eliminar_gasto.return_value = True
+        
+        resultado = agent.eliminar_gasto.invoke({})
+        
+        assert "Gasto eliminado exitosamente" in resultado
+        assert "Pizza" in resultado
+        mock_eliminar_gasto.assert_called_once_with(gasto_id)
+
+    @patch("app.agent.get_last_expense")
+    def test_eliminar_gasto_sin_gastos_recientes(self, mock_get_last):
+        """Test que maneja cuando no hay gastos recientes para eliminar."""
+        mock_get_last.return_value = None
+        
+        resultado = agent.eliminar_gasto.invoke({})
+        
+        assert "No encontré gastos recientes" in resultado
 
     @patch("app.agent.database.obtener_gastos")
     def test_listar_gastos_exitoso(self, mock_obtener_gastos):
