@@ -10,7 +10,7 @@ import httpx
 
 from app.config import get_settings
 from app.agent import procesar_mensaje
-from app.media import transcribir_audio_telegram
+from app.media import transcribir_audio_telegram, procesar_imagen_telegram
 
 # Configurar logging
 logging.basicConfig(
@@ -40,6 +40,7 @@ async def process_update(update_data: Dict[str, Any]) -> None:
     Soporta:
     - Mensajes de texto
     - Notas de voz (audio)
+    - Fotos/imágenes (recibos)
     """
     chat_id = None
     try:
@@ -52,12 +53,15 @@ async def process_update(update_data: Dict[str, Any]) -> None:
         chat_id = message.get("chat", {}).get("id")
         user_id = message.get("from", {}).get("id")
         text = message.get("text", "")
+        caption = message.get("caption", "")  # Caption de fotos/documentos
 
         # Detectar tipo de mensaje
         voice = message.get("voice")  # Nota de voz
         audio = message.get("audio")  # Archivo de audio
+        photo = message.get("photo")  # Lista de fotos (diferentes tamaños)
+        document = message.get("document")  # Documento (puede ser imagen)
 
-        logger.info(f"Mensaje recibido de usuario {user_id}: texto='{text[:50] if text else '(vacío)'}', voice={bool(voice)}")
+        logger.info(f"Mensaje recibido de usuario {user_id}: texto='{text[:50] if text else '(vacío)'}', voice={bool(voice)}, photo={bool(photo)}")
 
         # Validar usuario autorizado
         if user_id and not settings.is_user_allowed(user_id):
@@ -110,16 +114,71 @@ async def process_update(update_data: Dict[str, Any]) -> None:
                         )
                     return
 
+        # Procesar imagen (foto o documento de imagen)
+        if photo or (document and document.get("mime_type", "").startswith("image/")):
+            # Obtener file_id de la imagen con mejor resolución
+            if photo:
+                # photo es una lista ordenada por tamaño, tomamos la última (más grande)
+                file_id = photo[-1].get("file_id")
+            else:
+                file_id = document.get("file_id")
+            
+            if file_id:
+                logger.info(f"Procesando imagen: file_id={file_id}")
+                
+                # Notificar al usuario que estamos procesando
+                telegram_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendChatAction"
+                async with httpx.AsyncClient() as client:
+                    await client.post(
+                        telegram_url,
+                        json={"chat_id": chat_id, "action": "typing"},
+                    )
+                
+                try:
+                    # Extraer datos del recibo
+                    datos_recibo = await procesar_imagen_telegram(file_id)
+                    logger.info(f"Recibo extraído: {datos_recibo}")
+                    
+                    # Construir texto para el agente basado en los datos extraídos
+                    # Si hay caption, lo usamos como contexto adicional
+                    if caption:
+                        text = f"Registrar gasto de {datos_recibo['monto']} en {datos_recibo['categoria'].lower()}. Descripción: {datos_recibo['descripcion']}. {caption}"
+                    else:
+                        establecimiento_info = f" en {datos_recibo['establecimiento']}" if datos_recibo.get('establecimiento') else ""
+                        text = f"Registrar gasto de {datos_recibo['monto']} en {datos_recibo['categoria'].lower()}{establecimiento_info}. Descripción: {datos_recibo['descripcion']}"
+                    
+                    # Agregar nota de confianza si es baja
+                    if datos_recibo['confianza'] < 0.7:
+                        text += " (Nota: el recibo no estaba muy claro, verifica los datos)"
+                    
+                    logger.info(f"Texto construido desde recibo: '{text}'")
+                    
+                except Exception as e:
+                    logger.error(f"Error procesando imagen: {e}", exc_info=True)
+                    response_text = (
+                        "Mrrrow... 😿 No pude leer ese recibo. "
+                        "¿Puedes tomar una foto más clara o escribirme el gasto?"
+                    )
+                    # Enviar respuesta de error y salir
+                    telegram_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+                    async with httpx.AsyncClient() as client:
+                        await client.post(
+                            telegram_url,
+                            json={"chat_id": chat_id, "text": response_text},
+                        )
+                    return
+
         # Si no hay texto (ni transcrito), responder con mensaje de ayuda
         if not text:
             response_text = (
-                "Miau... 🐱 Envíame un mensaje de texto o nota de voz para registrar un gasto.\n\n"
+                "Miau... 🐱 Envíame un mensaje de texto, nota de voz o foto de recibo para registrar un gasto.\n\n"
                 "Ejemplos:\n"
                 "• Gasté 20 mil en almuerzo\n"
                 "• 50000 en transporte\n"
                 "• ¿Cuánto gasté este mes?\n"
                 "• Ver presupuesto de comida\n"
-                "• 🎤 O envíame una nota de voz diciendo tu gasto"
+                "• 🎤 Envíame una nota de voz\n"
+                "• 📸 Envíame una foto del recibo"
             )
         else:
             # Procesar el mensaje con el agente LLM
