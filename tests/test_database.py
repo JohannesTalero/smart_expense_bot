@@ -146,7 +146,8 @@ class TestObtenerGastos:
         resultado = database.obtener_gastos(user="test_user")
 
         assert resultado == gastos_esperados
-        mock_query.eq.assert_called_with("user", "test_user")
+        # Finanzas compartidas: no se filtra por usuario
+        mock_query.eq.assert_not_called()
         mock_query.order.assert_called_with("created_at", desc=True)
         mock_query.limit.assert_called_with(100)
 
@@ -200,8 +201,8 @@ class TestObtenerGastos:
         resultado = database.obtener_gastos(user="test_user", periodo="mes", categoria="Comida")
 
         assert resultado == gastos_esperados
-        # Debe llamar a eq dos veces: una para user y otra para categoria
-        assert mock_query.eq.call_count >= 2
+        # Finanzas compartidas: solo se filtra por categoría, no por usuario
+        mock_query.eq.assert_called_once_with("categoria", "Comida")
 
 
 class TestActualizarGasto:

@@ -164,8 +164,7 @@ def obtener_gastos(
         gastos = response.data or []
 
         logger.info(
-            f"Gastos obtenidos: Periodo={periodo}, "
-            f"Categoria={categoria}, Total={len(gastos)}"
+            f"Gastos obtenidos: Periodo={periodo}, " f"Categoria={categoria}, Total={len(gastos)}"
         )
 
         return gastos

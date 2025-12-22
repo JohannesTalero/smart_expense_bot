@@ -94,9 +94,7 @@ async def process_buffered_messages(chat_id: int) -> None:
     except Exception as e:
         logger.error(f"Error procesando mensajes acumulados: {e}", exc_info=True)
         try:
-            telegram_url = (
-                f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
-            )
+            telegram_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
             async with httpx.AsyncClient() as client:
                 await client.post(
                     telegram_url,
@@ -322,7 +320,12 @@ async def process_update(update_data: dict[str, Any]) -> None:
 
         # Determinar si el mensaje requiere procesamiento inmediato o puede ir al buffer
         # Audio y fotos ya fueron procesados arriba y tienen texto construido
-        is_media_message = bool(voice or audio or photo or (document and document.get("mime_type", "").startswith("image/")))
+        is_media_message = bool(
+            voice
+            or audio
+            or photo
+            or (document and document.get("mime_type", "").startswith("image/"))
+        )
 
         if is_media_message:
             # Mensajes con media: procesar inmediatamente
@@ -345,11 +348,13 @@ async def process_update(update_data: dict[str, Any]) -> None:
                 if chat_id not in pending_messages:
                     pending_messages[chat_id] = []
 
-                pending_messages[chat_id].append({
-                    "text": text,
-                    "user_name": user_name,
-                    "user_id": user_id,
-                })
+                pending_messages[chat_id].append(
+                    {
+                        "text": text,
+                        "user_name": user_name,
+                        "user_id": user_id,
+                    }
+                )
 
             # Programar procesamiento (reinicia el timer si ya existe)
             await schedule_buffer_processing(chat_id)

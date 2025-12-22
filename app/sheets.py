@@ -145,7 +145,19 @@ def obtener_presupuesto(categoria: str) -> Optional[float]:
         # Intentar convertir el límite a float.
         try:
             # get_all_records ya suele devolver numéricos como int/float.
-            return float(valor_limite)
+            if isinstance(valor_limite, (int, float)):
+                return float(valor_limite)
+
+            # Limpiar formato de moneda colombiana (ej: "$1.100.000")
+            valor_str = str(valor_limite).strip()
+            # Quitar símbolo de moneda
+            valor_str = valor_str.replace("$", "").replace("€", "").strip()
+            # Quitar puntos de miles (formato colombiano)
+            valor_str = valor_str.replace(".", "")
+            # Reemplazar coma decimal por punto (si existe)
+            valor_str = valor_str.replace(",", ".")
+
+            return float(valor_str)
         except (TypeError, ValueError):
             return None
 

@@ -314,4 +314,3 @@ class TestMediaMessagesImmediate:
 
         # No debe estar en el buffer
         assert chat_id not in main.pending_messages
-
