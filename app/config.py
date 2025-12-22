@@ -42,6 +42,10 @@ class Settings(BaseSettings):
         default="./credentials.json",
         description="Ruta al archivo de credenciales de Google Sheets",
     )
+    google_sheets_credentials_json: Optional[str] = Field(
+        default=None,
+        description="Credenciales de Google Sheets en formato JSON (alternativa al archivo, útil para producción)",
+    )
     google_sheets_spreadsheet_id: str = Field(
         ..., description="ID de la hoja de cálculo de Google Sheets"
     )

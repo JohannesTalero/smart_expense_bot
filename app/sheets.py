@@ -8,6 +8,7 @@ Este módulo se encarga de:
   - obtener_presupuesto(categoria)
 """
 
+import json
 from functools import lru_cache
 from typing import Optional
 
@@ -26,13 +27,27 @@ def get_gspread_client() -> gspread.Client:
     """Crea y devuelve un cliente de gspread autenticado.
 
     Usa las credenciales configuradas en Settings.
+    Soporta dos modos:
+    1. Variable de entorno GOOGLE_SHEETS_CREDENTIALS_JSON (producción)
+    2. Archivo credentials.json (desarrollo local)
     """
     settings = get_settings()
 
-    credentials = Credentials.from_service_account_file(
-        settings.google_sheets_credentials_path,
-        scopes=SCOPES,
-    )
+    # Prioridad: variable de entorno > archivo
+    if settings.google_sheets_credentials_json:
+        # Parsear JSON desde variable de entorno
+        credentials_info = json.loads(settings.google_sheets_credentials_json)
+        credentials = Credentials.from_service_account_info(
+            credentials_info,
+            scopes=SCOPES,
+        )
+    else:
+        # Leer desde archivo (desarrollo local)
+        credentials = Credentials.from_service_account_file(
+            settings.google_sheets_credentials_path,
+            scopes=SCOPES,
+        )
+
     return gspread.authorize(credentials)
 
 

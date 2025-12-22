@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: smart-expense-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.10"
+      - key: ENVIRONMENT
+        value: production
+      - key: USE_POLLING
+        value: "false"
+      - key: REDIS_ENABLED
+        value: "true"
+      # Las siguientes variables deben configurarse manualmente en Render:
+      # - TELEGRAM_BOT_TOKEN
+      # - TELEGRAM_ALLOWED_USER_IDS
+      # - OPENAI_API_KEY
+      # - SUPABASE_URL
+      # - SUPABASE_KEY
+      # - GOOGLE_SHEETS_SPREADSHEET_ID
+      # - GOOGLE_SHEETS_CREDENTIALS_JSON
+      # - REDIS_URL
+
