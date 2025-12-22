@@ -29,6 +29,10 @@ class TestSupabaseIntegration:
         if not settings.supabase_url or not settings.supabase_key:
             pytest.skip("Variables de Supabase no configuradas")
 
+        # Saltar si es una URL de prueba (común en CI)
+        if "test.supabase.co" in settings.supabase_url or settings.supabase_key == "test_key":
+            pytest.skip("Credenciales de Supabase son valores de prueba (normal en CI)")
+
     def test_conexion_supabase(self):
         """Verifica que se pueda conectar a Supabase."""
         # Limpiar cliente existente para forzar reconexión
