@@ -6,7 +6,6 @@ from typing import Dict, Any, List, Optional
 from uuid import UUID
 
 from supabase import create_client, Client
-from supabase.lib.client_options import ClientOptions
 
 from app.config import get_settings
 
@@ -28,19 +27,16 @@ def get_supabase_client() -> Client:
     if _supabase_client is None:
         settings = get_settings()
         
-        # Crear cliente con opciones
-        options = ClientOptions(
-            auto_refresh_token=True,
-            persist_session=False,  # No necesitamos persistir sesión en backend
-        )
-        
-        _supabase_client = create_client(
-            settings.supabase_url,
-            settings.supabase_key,
-            options=options,
-        )
-        
-        logger.info("Cliente de Supabase inicializado")
+        try:
+            # Supabase 2.27+ usa la nueva API simplificada
+            _supabase_client = create_client(
+                settings.supabase_url,
+                settings.supabase_key,
+            )
+            logger.info("Cliente de Supabase inicializado")
+        except Exception as e:
+            logger.error(f"Error inicializando cliente de Supabase: {e}", exc_info=True)
+            raise
     
     return _supabase_client
 

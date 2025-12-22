@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 import httpx
 
 from app.config import get_settings
+from app.agent import procesar_mensaje
 
 # Configurar logging
 logging.basicConfig(
@@ -35,6 +36,7 @@ async def process_update(update_data: Dict[str, Any]) -> None:
     """
     Procesa un update de Telegram (compartido entre webhook y polling).
     """
+    chat_id = None
     try:
         # Verificar que es un mensaje válido
         if "message" not in update_data:
@@ -51,10 +53,39 @@ async def process_update(update_data: Dict[str, Any]) -> None:
         # Validar usuario autorizado
         if user_id and not settings.is_user_allowed(user_id):
             logger.warning(f"Usuario no autorizado: {user_id}")
+            # Enviar mensaje de no autorizado
+            if chat_id:
+                telegram_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+                async with httpx.AsyncClient() as client:
+                    await client.post(
+                        telegram_url,
+                        json={
+                            "chat_id": chat_id,
+                            "text": "Miau... 🐱 Lo siento, no estás autorizado para usar este bot.",
+                        },
+                    )
             return
 
-        # Responder con mensaje simple
-        response_text = "Mensaje recibido ✓"
+        # Si no hay texto, responder con mensaje de ayuda
+        if not text:
+            response_text = (
+                "Miau... 🐱 Envíame un mensaje de texto para registrar un gasto.\n\n"
+                "Ejemplos:\n"
+                "• Gasté 20 mil en almuerzo\n"
+                "• 50000 en transporte\n"
+                "• ¿Cuánto gasté este mes?\n"
+                "• Ver presupuesto de comida"
+            )
+        else:
+            # Procesar el mensaje con el agente LLM
+            # Ejecutar en thread pool para no bloquear el event loop
+            user_str = str(user_id) if user_id else "default_user"
+            # No pasar chat_history - el agente lo obtiene de Redis si está habilitado
+            response_text = await asyncio.to_thread(
+                procesar_mensaje,
+                texto=text,
+                user=user_str,
+            )
         
         # Enviar respuesta a Telegram
         telegram_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
@@ -72,6 +103,20 @@ async def process_update(update_data: Dict[str, Any]) -> None:
 
     except Exception as e:
         logger.error(f"Error procesando update: {e}", exc_info=True)
+        # Enviar mensaje de error al usuario si tenemos chat_id
+        if chat_id:
+            try:
+                telegram_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+                async with httpx.AsyncClient() as client:
+                    await client.post(
+                        telegram_url,
+                        json={
+                            "chat_id": chat_id,
+                            "text": "Miau... 😿 Algo salió mal mientras procesaba tu mensaje. Por favor intenta de nuevo.",
+                        },
+                    )
+            except Exception as send_error:
+                logger.error(f"Error enviando mensaje de error: {send_error}", exc_info=True)
 
 
 async def poll_telegram_updates() -> None:
@@ -83,8 +128,13 @@ async def poll_telegram_updates() -> None:
     url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/getUpdates"
     
     last_update_id = 0
+    consecutive_errors = 0
+    max_consecutive_errors = 5
     
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    # Configurar timeout más largo para long polling
+    timeout = httpx.Timeout(60.0, connect=10.0)  # 60s total, 10s para conectar
+    
+    async with httpx.AsyncClient(timeout=timeout) as client:
         while True:
             try:
                 # Preguntar a Telegram por actualizaciones
@@ -95,6 +145,9 @@ async def poll_telegram_updates() -> None:
                         "timeout": 30,  # Long polling: espera hasta 30s por nuevos mensajes
                     }
                 )
+                
+                # Resetear contador de errores en caso de éxito
+                consecutive_errors = 0
                 
                 if response.status_code != 200:
                     logger.error(f"Error en polling: {response.status_code}")
@@ -119,12 +172,35 @@ async def poll_telegram_updates() -> None:
                     # No hay mensajes nuevos, esperar un poco antes de la siguiente consulta
                     await asyncio.sleep(settings.polling_interval)
                 
+            except httpx.ReadTimeout:
+                # Timeout es normal en long polling cuando no hay mensajes
+                # No es un error crítico, solo continuar
+                logger.debug("Timeout en polling (normal en long polling)")
+                consecutive_errors = 0  # Timeout no cuenta como error
+                continue
+            except httpx.ConnectTimeout:
+                logger.warning("Timeout de conexión en polling, reintentando...")
+                consecutive_errors += 1
+                if consecutive_errors >= max_consecutive_errors:
+                    logger.error("Demasiados errores consecutivos, esperando más tiempo...")
+                    await asyncio.sleep(30)
+                    consecutive_errors = 0
+                else:
+                    await asyncio.sleep(5)
             except asyncio.CancelledError:
                 logger.info("Polling cancelado")
                 break
             except Exception as e:
+                consecutive_errors += 1
                 logger.error(f"Error en polling: {e}", exc_info=True)
-                await asyncio.sleep(5)  # Esperar más si hay error
+                
+                # Si hay muchos errores consecutivos, esperar más tiempo
+                if consecutive_errors >= max_consecutive_errors:
+                    logger.error("Demasiados errores consecutivos, esperando más tiempo...")
+                    await asyncio.sleep(30)
+                    consecutive_errors = 0
+                else:
+                    await asyncio.sleep(5)
 
 
 @app.on_event("startup")

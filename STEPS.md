@@ -49,10 +49,10 @@ Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
 ## Paso 4: Conexión a Google Sheets 📊
 **Objetivo:** Leer presupuestos desde la hoja de cálculo.
 
-- [ ] Crear `app/sheets.py` con cliente gspread
-- [ ] Función `obtener_presupuesto(categoria)`
-- [ ] Función `obtener_categorias()` (lista todas)
-- [ ] Tests unitarios para sheets
+- [X] Crear `app/sheets.py` con cliente gspread
+- [X] Función `obtener_presupuesto(categoria)`
+- [X] Función `obtener_categorias()` (lista todas)
+- [X] Tests unitarios para sheets
 
 **Prueba:** Test pasa → Puedo leer el límite de "Comida" desde Sheets.
 
@@ -61,17 +61,17 @@ Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
 ## Paso 5: Agente LLM con Tools 🧠
 **Objetivo:** El cerebro que entiende mensajes y ejecuta acciones.
 
-- [ ] Crear `app/agent.py`
-- [ ] Definir tools con OpenAI Function Calling:
+- [X] Crear `app/agent.py`
+- [X] Definir tools con LangChain:
   - `registrar_gasto`
   - `editar_gasto`
   - `eliminar_gasto`
   - `listar_gastos`
   - `verificar_presupuesto`
   - `generar_reporte`
-- [ ] System prompt con personalidad del bot
-- [ ] Función principal `procesar_mensaje(texto, user)`
-- [ ] Tests para el agente (con mocks de OpenAI)
+- [X] System prompt con personalidad del bot (Miss Toña)
+- [X] Función principal `procesar_mensaje(texto, user)`
+- [X] Tests para el agente (con mocks de LangChain)
 
 **Prueba:** "Gasté 20 mil en almuerzo" → Llama a `registrar_gasto` correctamente.
 
@@ -152,8 +152,8 @@ Cada paso es un checkpoint. Después de completar cada uno, probamos y seguimos.
 | 1. Setup | ✅ Completado | - |
 | 2. Webhook | ✅ Completado | - |
 | 3. Supabase | ✅ Completado | - |
-| 4. Sheets | ⏳ Pendiente | - |
-| 5. Agente | ⏳ Pendiente | - |
+| 4. Sheets | ✅ Completado | - |
+| 5. Agente | ✅ Completado | - |
 | 6. Audio | ⏳ Pendiente | - |
 | 7. Imágenes | ⏳ Pendiente | - |
 | 8. Integración | ⏳ Pendiente | - |

@@ -51,12 +51,12 @@ class Settings(BaseSettings):
         default="Presupuestos", description="Nombre de la hoja de trabajo"
     )
 
-    # Redis (Opcional)
+    # Redis (Opcional pero recomendado para memoria conversacional)
     redis_url: Optional[str] = Field(
-        default="redis://localhost:6379", description="URL de Redis"
+        default="redis://localhost:6379", description="URL de Redis (ej: redis://localhost:6379)"
     )
     redis_enabled: bool = Field(
-        default=False, description="Habilitar Redis para memoria conversacional"
+        default=True, description="Habilitar Redis para memoria conversacional (recomendado)"
     )
 
     # Application
