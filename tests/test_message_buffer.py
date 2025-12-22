@@ -1,7 +1,7 @@
 """Tests para el buffer de mensajes (debounce) en main.py."""
 
 import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 

@@ -58,10 +58,9 @@ async def process_buffered_messages(chat_id: int) -> None:
     if not messages:
         return
 
-    # Usar datos del primer mensaje para user_name, user_id, etc.
+    # Usar datos del primer mensaje para user_name
     first_msg = messages[0]
     user_name = first_msg["user_name"]
-    user_id = first_msg["user_id"]
 
     # Concatenar todos los textos
     combined_text = " ".join(msg["text"] for msg in messages if msg.get("text"))

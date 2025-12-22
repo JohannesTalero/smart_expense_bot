@@ -108,16 +108,19 @@ def insertar_gasto(
 
 
 def obtener_gastos(
-    user: str,
+    user: Optional[str] = None,
     periodo: Optional[str] = None,
     categoria: Optional[str] = None,
     limite: int = 100,
 ) -> list[dict[str, Any]]:
     """
-    Obtiene una lista de gastos filtrados por usuario y opcionalmente por período y categoría.
+    Obtiene una lista de gastos, opcionalmente filtrados por período y categoría.
+
+    Los gastos son compartidos entre todos los usuarios autorizados,
+    por lo que no se filtra por usuario (finanzas compartidas).
 
     Args:
-        user: Nombre del usuario.
+        user: Nombre del usuario (ignorado, mantenido por compatibilidad).
         periodo: Período de tiempo ("hoy", "semana", "mes", "año") o None para todos.
         categoria: Filtrar por categoría específica (opcional).
         limite: Número máximo de resultados (default: 100).
@@ -127,8 +130,8 @@ def obtener_gastos(
     """
     client = get_supabase_client()
 
-    # Construir query base
-    query = client.table("gastos").select("*").eq("user", user)
+    # Construir query base - Sin filtro por usuario (finanzas compartidas)
+    query = client.table("gastos").select("*")
 
     # Aplicar filtro de período si se especifica
     if periodo:
@@ -161,7 +164,7 @@ def obtener_gastos(
         gastos = response.data or []
 
         logger.info(
-            f"Gastos obtenidos: User={user}, Periodo={periodo}, "
+            f"Gastos obtenidos: Periodo={periodo}, "
             f"Categoria={categoria}, Total={len(gastos)}"
         )
 

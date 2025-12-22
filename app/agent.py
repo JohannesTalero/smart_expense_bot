@@ -352,13 +352,17 @@ def listar_gastos(
             porcentaje = (monto / total) * 100 if total > 0 else 0
             resumen += f"- {cat}: ${monto:,.0f} ({porcentaje:.1f}%)\n"
 
-        # Listar últimos 5 gastos
+        # Listar últimos 5 gastos (incluye quién lo registró para finanzas compartidas)
         resumen += "\nÚltimos gastos:\n"
         for gasto in gastos[:5]:
             fecha = gasto.get("created_at", "")[:10] if gasto.get("created_at") else "N/A"
+            registrado_por = gasto.get("user", "")
+            # Mostrar solo el primer nombre si hay espacio
+            nombre_corto = registrado_por.split()[0] if registrado_por else "N/A"
             resumen += (
                 f"- {fecha}: ${gasto.get('monto', 0):,.0f} "
-                f"en {gasto.get('item', 'N/A')} ({gasto.get('categoria', 'N/A')})\n"
+                f"en {gasto.get('item', 'N/A')} ({gasto.get('categoria', 'N/A')}) "
+                f"por {nombre_corto}\n"
             )
 
         return resumen
@@ -524,10 +528,12 @@ def crear_agente() -> AgentExecutor:
     agent = create_openai_tools_agent(llm, TOOLS, prompt)
 
     # Crear el executor
+    # verbose=False para evitar warning: "'NoneType' object has no attribute 'get'"
+    # El logging se maneja por separado en el módulo
     agent_executor = AgentExecutor(
         agent=agent,
         tools=TOOLS,
-        verbose=True,  # Para debugging
+        verbose=False,
         handle_parsing_errors=True,
     )
 
