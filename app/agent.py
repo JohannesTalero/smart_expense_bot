@@ -151,7 +151,9 @@ def registrar_gasto(
         if fecha_gasto:
             from datetime import date
 
-            fecha_obj = date.fromisoformat(fecha_gasto) if isinstance(fecha_gasto, str) else fecha_gasto
+            fecha_obj = (
+                date.fromisoformat(fecha_gasto) if isinstance(fecha_gasto, str) else fecha_gasto
+            )
             if fecha_obj != date.today():
                 # Mostrar fecha solo si no es hoy
                 fecha_texto = f" (fecha: {fecha_obj.strftime('%d/%m')})"
