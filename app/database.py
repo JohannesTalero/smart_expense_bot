@@ -1,7 +1,8 @@
 """Cliente de Supabase para operaciones CRUD de gastos."""
 
 import logging
-from datetime import datetime, timedelta
+import re
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 from uuid import UUID
 
@@ -13,6 +14,89 @@ logger = logging.getLogger(__name__)
 
 # Cliente global de Supabase (se inicializa en get_supabase_client)
 _supabase_client: Optional[Client] = None
+
+# Mapeo de días de la semana en español
+DIAS_SEMANA = {
+    "lunes": 0,
+    "martes": 1,
+    "miércoles": 2,
+    "miercoles": 2,
+    "jueves": 3,
+    "viernes": 4,
+    "sábado": 5,
+    "sabado": 5,
+    "domingo": 6,
+}
+
+
+def parsear_fecha(texto_fecha: Optional[str]) -> date:
+    """
+    Convierte texto de fecha relativa o absoluta a un objeto date.
+
+    Soporta:
+    - "hoy" -> fecha actual
+    - "ayer" -> fecha actual - 1 día
+    - "anteayer" -> fecha actual - 2 días
+    - "hace X días" -> fecha actual - X días
+    - "el lunes/martes/etc" -> último día de la semana mencionado
+    - "YYYY-MM-DD" -> fecha específica
+    - None -> fecha actual
+
+    Args:
+        texto_fecha: Texto describiendo la fecha o None.
+
+    Returns:
+        Objeto date correspondiente.
+    """
+    if not texto_fecha:
+        return date.today()
+
+    texto = texto_fecha.lower().strip()
+
+    # Fecha actual
+    if texto == "hoy":
+        return date.today()
+
+    # Ayer
+    if texto == "ayer":
+        return date.today() - timedelta(days=1)
+
+    # Anteayer
+    if texto in ("anteayer", "antes de ayer", "antier"):
+        return date.today() - timedelta(days=2)
+
+    # "hace X días"
+    match_hace = re.match(r"hace\s+(\d+)\s+d[ií]as?", texto)
+    if match_hace:
+        dias = int(match_hace.group(1))
+        return date.today() - timedelta(days=dias)
+
+    # Día de la semana (el lunes, el martes, etc.)
+    for dia_nombre, dia_num in DIAS_SEMANA.items():
+        if dia_nombre in texto:
+            hoy = date.today()
+            dias_atras = (hoy.weekday() - dia_num) % 7
+            # Si es 0, significa que es hoy, pero probablemente se refiere a la semana pasada
+            if dias_atras == 0:
+                dias_atras = 7
+            return hoy - timedelta(days=dias_atras)
+
+    # Intentar parsear como fecha ISO (YYYY-MM-DD)
+    try:
+        return datetime.strptime(texto, "%Y-%m-%d").date()
+    except ValueError:
+        pass
+
+    # Intentar parsear como DD/MM/YYYY o DD-MM-YYYY
+    for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%d-%m-%y"):
+        try:
+            return datetime.strptime(texto, fmt).date()
+        except ValueError:
+            continue
+
+    # Si no se puede parsear, devolver hoy y loguear advertencia
+    logger.warning(f"No se pudo parsear la fecha '{texto_fecha}', usando fecha actual")
+    return date.today()
 
 
 def get_supabase_client() -> Client:
@@ -49,6 +133,7 @@ def insertar_gasto(
     metodo: Optional[str] = None,
     raw_input: Optional[str] = None,
     notas: Optional[str] = None,
+    fecha_gasto: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Inserta un nuevo gasto en la base de datos.
@@ -61,6 +146,8 @@ def insertar_gasto(
         metodo: Método de pago (opcional).
         raw_input: Texto original o transcripción (opcional).
         notas: Contexto adicional opcional (opcional).
+        fecha_gasto: Fecha del gasto en texto (ej: "ayer", "hace 3 días", "2025-12-20").
+                     Si es None, usa la fecha actual.
 
     Returns:
         Diccionario con los datos del gasto insertado (incluye el id generado).
@@ -74,6 +161,9 @@ def insertar_gasto(
 
     client = get_supabase_client()
 
+    # Parsear la fecha del gasto
+    fecha_real = parsear_fecha(fecha_gasto)
+
     # Preparar datos para insertar
     data = {
         "user": user,
@@ -81,6 +171,7 @@ def insertar_gasto(
         "item": item,
         "categoria": categoria,
         "created_at": datetime.utcnow().isoformat(),
+        "fecha_gasto": fecha_real.isoformat(),
     }
 
     # Agregar campos opcionales si están presentes
@@ -98,7 +189,9 @@ def insertar_gasto(
             raise Exception("No se recibieron datos de la inserción")
 
         gasto = response.data[0]
-        logger.info(f"Gasto insertado: ID={gasto['id']}, User={user}, Monto={monto}")
+        logger.info(
+            f"Gasto insertado: ID={gasto['id']}, User={user}, Monto={monto}, Fecha={fecha_real}"
+        )
 
         return gasto
 
@@ -121,7 +214,8 @@ def obtener_gastos(
 
     Args:
         user: Nombre del usuario (ignorado, mantenido por compatibilidad).
-        periodo: Período de tiempo ("hoy", "semana", "mes", "año") o None para todos.
+        periodo: Período de tiempo ("hoy", "ayer", "semana", "mes", "año") o None para todos.
+                 También acepta fechas relativas como "hace 3 días".
         categoria: Filtrar por categoría específica (opcional).
         limite: Número máximo de resultados (default: 100).
 
@@ -135,28 +229,55 @@ def obtener_gastos(
 
     # Aplicar filtro de período si se especifica
     if periodo:
-        ahora = datetime.utcnow()
+        hoy = date.today()
+        periodo_lower = periodo.lower().strip()
 
-        if periodo.lower() == "hoy":
-            inicio = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
-        elif periodo.lower() == "semana":
-            inicio = ahora - timedelta(days=7)
-        elif periodo.lower() == "mes":
-            inicio = ahora - timedelta(days=30)
-        elif periodo.lower() == "año":
-            inicio = ahora - timedelta(days=365)
+        # Períodos que son un día específico
+        if periodo_lower == "hoy":
+            fecha_inicio = hoy
+            fecha_fin = hoy
+        elif periodo_lower == "ayer":
+            fecha_inicio = hoy - timedelta(days=1)
+            fecha_fin = fecha_inicio
+        elif periodo_lower in ("anteayer", "antes de ayer", "antier"):
+            fecha_inicio = hoy - timedelta(days=2)
+            fecha_fin = fecha_inicio
+        # Períodos que son rangos
+        elif periodo_lower == "semana":
+            fecha_inicio = hoy - timedelta(days=7)
+            fecha_fin = hoy
+        elif periodo_lower == "mes":
+            fecha_inicio = hoy - timedelta(days=30)
+            fecha_fin = hoy
+        elif periodo_lower == "año":
+            fecha_inicio = hoy - timedelta(days=365)
+            fecha_fin = hoy
         else:
-            logger.warning(f"Período desconocido: {periodo}, ignorando filtro")
-            inicio = None
+            # Intentar parsear como fecha específica o relativa
+            try:
+                fecha_parseada = parsear_fecha(periodo)
+                fecha_inicio = fecha_parseada
+                fecha_fin = fecha_parseada
+            except Exception:
+                logger.warning(f"Período desconocido: {periodo}, ignorando filtro")
+                fecha_inicio = None
+                fecha_fin = None
 
-        if inicio:
-            query = query.gte("created_at", inicio.isoformat())
+        # Aplicar filtros de fecha usando fecha_gasto
+        if fecha_inicio and fecha_fin:
+            if fecha_inicio == fecha_fin:
+                # Día específico
+                query = query.eq("fecha_gasto", fecha_inicio.isoformat())
+            else:
+                # Rango de fechas
+                query = query.gte("fecha_gasto", fecha_inicio.isoformat())
+                query = query.lte("fecha_gasto", fecha_fin.isoformat())
 
     # Aplicar filtro de categoría si se especifica
     if categoria:
         query = query.eq("categoria", categoria)
 
-    # Ordenar por fecha descendente (más recientes primero) y limitar
+    # Ordenar por fecha de creación descendente (más recientes primero) y limitar
     query = query.order("created_at", desc=True).limit(limite)
 
     try:
@@ -164,7 +285,7 @@ def obtener_gastos(
         gastos = response.data or []
 
         logger.info(
-            f"Gastos obtenidos: Periodo={periodo}, " f"Categoria={categoria}, Total={len(gastos)}"
+            f"Gastos obtenidos: Periodo={periodo}, Categoria={categoria}, Total={len(gastos)}"
         )
 
         return gastos
@@ -184,7 +305,7 @@ def actualizar_gasto(
     Args:
         gasto_id: ID del gasto a actualizar (UUID como string).
         campos: Diccionario con los campos a actualizar y sus nuevos valores.
-                Campos válidos: monto, item, categoria, metodo, notas.
+                Campos válidos: monto, item, categoria, metodo, notas, fecha_gasto.
 
     Returns:
         Diccionario con los datos del gasto actualizado.
@@ -200,7 +321,7 @@ def actualizar_gasto(
         raise ValueError(f"ID de gasto inválido: {gasto_id}") from e
 
     # Campos permitidos para actualizar
-    campos_permitidos = {"monto", "item", "categoria", "metodo", "notas"}
+    campos_permitidos = {"monto", "item", "categoria", "metodo", "notas", "fecha_gasto"}
 
     # Validar que todos los campos sean permitidos
     campos_invalidos = set(campos.keys()) - campos_permitidos
@@ -210,6 +331,11 @@ def actualizar_gasto(
     # Validar monto si está presente
     if "monto" in campos and campos["monto"] <= 0:
         raise ValueError("El monto debe ser mayor a 0")
+
+    # Parsear fecha_gasto si está presente como texto
+    if "fecha_gasto" in campos and isinstance(campos["fecha_gasto"], str):
+        fecha_parseada = parsear_fecha(campos["fecha_gasto"])
+        campos["fecha_gasto"] = fecha_parseada.isoformat()
 
     client = get_supabase_client()
 

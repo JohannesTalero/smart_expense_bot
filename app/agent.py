@@ -99,6 +99,7 @@ def registrar_gasto(
     metodo: Optional[str] = None,
     notas: Optional[str] = None,
     raw_input: Optional[str] = None,
+    fecha: Optional[str] = None,
 ) -> str:
     """Registra un nuevo gasto en la base de datos.
 
@@ -106,9 +107,11 @@ def registrar_gasto(
         monto: Valor del gasto (debe ser mayor a 0).
         item: Descripción del gasto (ej: "Pizza", "Taxi al aeropuerto").
         categoria: Categoría del gasto (ej: "Comida", "Transporte", "Ocio").
-        metodo: Método de pago (opcional, ej: "Efectivo", "Tarjeta").
+        metodo: Método de pago (opcional, ej: "Efectivo", "Tarjeta", "Nequi").
         notas: Notas adicionales (opcional).
         raw_input: Texto original del usuario (opcional).
+        fecha: Fecha del gasto (opcional). Acepta "hoy", "ayer", "hace 3 días",
+               "el viernes", o formato "YYYY-MM-DD". Si no se especifica, usa hoy.
 
     Returns:
         Mensaje de confirmación con los detalles del gasto registrado.
@@ -126,6 +129,7 @@ def registrar_gasto(
             metodo=metodo,
             notas=notas,
             raw_input=raw_input,
+            fecha_gasto=fecha,
         )
 
         # Paso 2: Guardar el gasto en Redis para poder referenciarlo después
@@ -137,8 +141,22 @@ def registrar_gasto(
                 "monto": monto,
                 "item": item,
                 "categoria": categoria,
+                "fecha_gasto": gasto.get("fecha_gasto"),
             },
         )
+
+        # Obtener la fecha para mostrar en la respuesta
+        fecha_gasto = gasto.get("fecha_gasto", "")
+        fecha_texto = ""
+        if fecha_gasto:
+            from datetime import date
+
+            fecha_obj = (
+                date.fromisoformat(fecha_gasto) if isinstance(fecha_gasto, str) else fecha_gasto
+            )
+            if fecha_obj != date.today():
+                # Mostrar fecha solo si no es hoy
+                fecha_texto = f" (fecha: {fecha_obj.strftime('%d/%m')})"
 
         # Paso 3: Intentar verificar presupuesto (operación secundaria, no crítica)
         # Si falla, el gasto ya está registrado - no perdemos la operación principal
@@ -153,7 +171,7 @@ def registrar_gasto(
 
                 return (
                     f"Gasto registrado exitosamente. ID: {gasto['id']}. "
-                    f"Monto: ${monto:,.0f} en {item} ({categoria}). "
+                    f"Monto: ${monto:,.0f} en {item} ({categoria}){fecha_texto}. "
                     f"Presupuesto restante: ${restante:,.0f} ({porcentaje_usado:.1f}% usado)."
                 )
         except Exception as sheets_error:
@@ -164,7 +182,7 @@ def registrar_gasto(
         # Retornar éxito sin información de presupuesto
         return (
             f"Gasto registrado exitosamente. ID: {gasto['id']}. "
-            f"Monto: ${monto:,.0f} en {item} ({categoria})."
+            f"Monto: ${monto:,.0f} en {item} ({categoria}){fecha_texto}."
         )
 
     except ValueError as e:
@@ -189,7 +207,8 @@ def editar_gasto(
     3. Automáticamente usa el último gasto registrado si no se especifica ninguno
 
     Args:
-        campo: Campo a editar (monto, item, categoria, metodo, notas).
+        campo: Campo a editar (monto, item, categoria, metodo, notas, fecha).
+               Para fecha: acepta "ayer", "hace 3 días", "el viernes", "2025-12-20".
         nuevo_valor: Nuevo valor para el campo.
         gasto_id: ID del gasto a editar (UUID). Opcional.
         descripcion: Descripción o item del gasto para buscarlo (ej: "pizza", "taxi"). Opcional.
@@ -226,17 +245,28 @@ def editar_gasto(
             id_a_editar = ultimo_gasto["id"]
             contexto = f"último gasto: {ultimo_gasto['item']} (${ultimo_gasto['monto']:,.0f})"
 
-        campos = {campo: nuevo_valor}
+        # Mapear "fecha" a "fecha_gasto" para la base de datos
+        campo_db = "fecha_gasto" if campo.lower() == "fecha" else campo
+        campos = {campo_db: nuevo_valor}
 
         # Convertir monto a float si es necesario
-        if campo == "monto":
+        if campo_db == "monto":
             campos["monto"] = float(nuevo_valor)
 
-        database.actualizar_gasto(id_a_editar, campos)
+        gasto_actualizado = database.actualizar_gasto(id_a_editar, campos)
+
+        # Formatear el valor para mostrar
+        valor_mostrar = nuevo_valor
+        if campo_db == "fecha_gasto" and gasto_actualizado.get("fecha_gasto"):
+            from datetime import date
+
+            fecha_str = gasto_actualizado["fecha_gasto"]
+            fecha_obj = date.fromisoformat(fecha_str) if isinstance(fecha_str, str) else fecha_str
+            valor_mostrar = fecha_obj.strftime("%d/%m/%Y")
 
         return (
             f"Gasto actualizado exitosamente ({contexto}). "
-            f"Campo '{campo}' cambiado a: {nuevo_valor}."
+            f"Campo '{campo}' cambiado a: {valor_mostrar}."
         )
 
     except ValueError as e:
@@ -316,7 +346,8 @@ def listar_gastos(
     """Lista los gastos del usuario filtrados por período y/o categoría.
 
     Args:
-        periodo: Período de tiempo ("hoy", "semana", "mes", "año") o None para todos.
+        periodo: Período de tiempo ("hoy", "ayer", "semana", "mes", "año") o None para todos.
+                 También acepta "hace 3 días", "el viernes", etc.
         categoria: Filtrar por categoría específica (opcional).
 
     Returns:
@@ -355,7 +386,9 @@ def listar_gastos(
         # Listar últimos 5 gastos (incluye quién lo registró para finanzas compartidas)
         resumen += "\nÚltimos gastos:\n"
         for gasto in gastos[:5]:
-            fecha = gasto.get("created_at", "")[:10] if gasto.get("created_at") else "N/A"
+            # Usar fecha_gasto si existe, sino created_at
+            fecha_raw = gasto.get("fecha_gasto") or gasto.get("created_at", "")
+            fecha = fecha_raw[:10] if fecha_raw else "N/A"
             registrado_por = gasto.get("user", "")
             # Mostrar solo el primer nombre si hay espacio
             nombre_corto = registrado_por.split()[0] if registrado_por else "N/A"
