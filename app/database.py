@@ -277,8 +277,8 @@ def obtener_gastos(
     if categoria:
         query = query.eq("categoria", categoria)
 
-    # Ordenar por fecha del gasto descendente (más recientes primero) y limitar
-    query = query.order("fecha_gasto", desc=True).limit(limite)
+    # Ordenar por fecha de creación descendente (más recientes primero) y limitar
+    query = query.order("created_at", desc=True).limit(limite)
 
     try:
         response = query.execute()
