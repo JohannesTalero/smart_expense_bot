@@ -2,8 +2,10 @@
 
 import logging
 import re
+import time
 from datetime import date, datetime, timedelta
-from typing import Any, Optional
+from functools import wraps
+from typing import Any, Callable, Optional, TypeVar
 from uuid import UUID
 
 from supabase import Client, create_client
@@ -14,6 +16,105 @@ logger = logging.getLogger(__name__)
 
 # Cliente global de Supabase (se inicializa en get_supabase_client)
 _supabase_client: Optional[Client] = None
+
+# Configuración de reintentos
+MAX_RETRIES = 3
+INITIAL_BACKOFF = 1.0  # segundos
+MAX_BACKOFF = 10.0  # segundos
+BACKOFF_MULTIPLIER = 2.0
+
+# Type variable para el decorador
+T = TypeVar("T")
+
+
+def _reset_supabase_client() -> None:
+    """Resetea el cliente de Supabase para forzar reconexión."""
+    global _supabase_client
+    _supabase_client = None
+    logger.info("Cliente de Supabase reseteado para reconexión")
+
+
+def with_retry(
+    max_retries: int = MAX_RETRIES,
+    initial_backoff: float = INITIAL_BACKOFF,
+    max_backoff: float = MAX_BACKOFF,
+    backoff_multiplier: float = BACKOFF_MULTIPLIER,
+) -> Callable[[Callable[..., T]], Callable[..., T]]:
+    """
+    Decorador que implementa reintentos con backoff exponencial.
+
+    Útil para operaciones de base de datos que pueden fallar temporalmente
+    cuando el servidor se "despierta" después de estar inactivo.
+
+    Args:
+        max_retries: Número máximo de reintentos.
+        initial_backoff: Tiempo inicial de espera entre reintentos (segundos).
+        max_backoff: Tiempo máximo de espera entre reintentos (segundos).
+        backoff_multiplier: Multiplicador para el backoff exponencial.
+
+    Returns:
+        Decorador que envuelve la función con lógica de reintentos.
+    """
+
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> T:
+            last_exception: Optional[Exception] = None
+            backoff = initial_backoff
+
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    error_msg = str(e).lower()
+
+                    # Detectar errores de conexión que ameritan reintento
+                    is_connection_error = any(
+                        keyword in error_msg
+                        for keyword in [
+                            "connection",
+                            "timeout",
+                            "network",
+                            "refused",
+                            "reset",
+                            "broken pipe",
+                            "ssl",
+                            "eof",
+                            "closed",
+                            "unavailable",
+                            "socket",
+                            "connect",
+                        ]
+                    )
+
+                    # Si es el último intento o no es error de conexión, propagar
+                    if attempt >= max_retries or not is_connection_error:
+                        logger.error(
+                            f"Error en {func.__name__} después de {attempt + 1} intento(s): {e}"
+                        )
+                        raise
+
+                    # Resetear cliente para forzar reconexión
+                    _reset_supabase_client()
+
+                    logger.warning(
+                        f"Intento {attempt + 1}/{max_retries + 1} falló en {func.__name__}: {e}. "
+                        f"Reintentando en {backoff:.1f}s..."
+                    )
+
+                    time.sleep(backoff)
+                    backoff = min(backoff * backoff_multiplier, max_backoff)
+
+            # Si llegamos aquí, todos los reintentos fallaron
+            if last_exception:
+                raise last_exception
+            raise Exception(f"Error desconocido en {func.__name__}")
+
+        return wrapper
+
+    return decorator
+
 
 # Mapeo de días de la semana en español
 DIAS_SEMANA = {
@@ -125,6 +226,7 @@ def get_supabase_client() -> Client:
     return _supabase_client
 
 
+@with_retry()
 def insertar_gasto(
     user: str,
     monto: float,
@@ -200,6 +302,7 @@ def insertar_gasto(
         raise
 
 
+@with_retry()
 def obtener_gastos(
     user: Optional[str] = None,
     periodo: Optional[str] = None,
@@ -295,6 +398,7 @@ def obtener_gastos(
         raise
 
 
+@with_retry()
 def actualizar_gasto(
     gasto_id: str,
     campos: dict[str, Any],
@@ -355,6 +459,7 @@ def actualizar_gasto(
         raise
 
 
+@with_retry()
 def eliminar_gasto(gasto_id: str) -> bool:
     """
     Elimina un gasto de la base de datos.
@@ -394,6 +499,7 @@ def eliminar_gasto(gasto_id: str) -> bool:
         raise
 
 
+@with_retry()
 def obtener_gasto_por_id(gasto_id: str) -> Optional[dict[str, Any]]:
     """
     Obtiene un gasto específico por su ID.

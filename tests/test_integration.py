@@ -155,6 +155,8 @@ class TestGoogleSheetsIntegration:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Verifica que Google Sheets esté configurado."""
+        import json
+
         from app.config import get_settings
 
         settings = get_settings()
@@ -162,11 +164,28 @@ class TestGoogleSheetsIntegration:
         if not settings.google_sheets_spreadsheet_id:
             pytest.skip("ID de Google Sheets no configurado")
 
-        # Verificar si el archivo de credenciales existe
-        if not os.path.exists(settings.google_sheets_credentials_path):
-            pytest.skip(
-                f"Archivo de credenciales no encontrado: {settings.google_sheets_credentials_path}"
-            )
+        # Verificar credenciales - prioridad: JSON env var > archivo
+        if settings.google_sheets_credentials_json:
+            # Credenciales vienen de variable de entorno
+            try:
+                creds = json.loads(settings.google_sheets_credentials_json)
+                if not creds.get("client_email") or not creds.get("private_key"):
+                    pytest.skip("Credenciales JSON de Google Sheets son mock/inválidas")
+            except json.JSONDecodeError:
+                pytest.skip("Credenciales JSON de Google Sheets no son válidas")
+        else:
+            # Credenciales vienen de archivo
+            if not os.path.exists(settings.google_sheets_credentials_path):
+                pytest.skip(
+                    f"Archivo de credenciales no encontrado: {settings.google_sheets_credentials_path}"
+                )
+            try:
+                with open(settings.google_sheets_credentials_path) as f:
+                    creds = json.load(f)
+                if not creds.get("client_email") or not creds.get("private_key"):
+                    pytest.skip("Credenciales de Google Sheets son mock/inválidas")
+            except (json.JSONDecodeError, OSError):
+                pytest.skip("No se pudo leer archivo de credenciales")
 
     def test_conexion_google_sheets(self):
         """Verifica que se pueda conectar a Google Sheets."""

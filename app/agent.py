@@ -592,12 +592,6 @@ def obtener_agente() -> AgentExecutor:
     return _agente
 
 
-# Contexto global para almacenar el usuario actual (thread-safe en producción)
-import threading
-
-_context = threading.local()
-
-
 def procesar_mensaje(
     texto: str,
     user: str = "default_user",
