@@ -172,23 +172,37 @@ class TestGoogleSheetsSmoke:
 
     def test_google_sheets_conexion(self):
         """Verifica que se pueda conectar a Google Sheets."""
+        import json
+
         from app.config import get_settings
 
         settings = get_settings()
 
-        if not os.path.exists(settings.google_sheets_credentials_path):
-            pytest.skip("Archivo de credenciales no existe")
+        # Verificar credenciales - prioridad: JSON env var > archivo
+        if settings.google_sheets_credentials_json:
+            # Credenciales vienen de variable de entorno
+            try:
+                creds = json.loads(settings.google_sheets_credentials_json)
+                if not creds.get("client_email") or not creds.get("private_key"):
+                    pytest.skip("Credenciales JSON de Google Sheets son mock/inválidas")
+                if creds.get("type") != "service_account":
+                    pytest.skip("Credenciales no son de Service Account")
+            except json.JSONDecodeError:
+                pytest.skip("Credenciales JSON de Google Sheets no son válidas")
+        else:
+            # Credenciales vienen de archivo
+            if not os.path.exists(settings.google_sheets_credentials_path):
+                pytest.skip("Archivo de credenciales no existe")
 
-        # Verificar formato antes de intentar conexión
-        import json
-
-        try:
-            with open(settings.google_sheets_credentials_path) as f:
-                creds = json.load(f)
-            if creds.get("type") != "service_account":
-                pytest.skip("Credenciales no son de Service Account")
-        except:
-            pytest.skip("No se pudo leer archivo de credenciales")
+            try:
+                with open(settings.google_sheets_credentials_path) as f:
+                    creds = json.load(f)
+                if creds.get("type") != "service_account":
+                    pytest.skip("Credenciales no son de Service Account")
+                if not creds.get("client_email") or not creds.get("private_key"):
+                    pytest.skip("Credenciales de Google Sheets son mock/inválidas")
+            except (json.JSONDecodeError, OSError):
+                pytest.skip("No se pudo leer archivo de credenciales")
 
         from app.sheets import get_gspread_client
 
